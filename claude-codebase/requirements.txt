@@ -1,0 +1,18 @@
+# Claude-Based Codebase - Python Dependencies
+
+# Core dependencies
+anthropic>=0.18.0        # Claude API client
+pyyaml>=6.0              # YAML configuration parsing
+
+# Optional dependencies for production
+# tiktoken>=0.5.0         # Accurate token counting (alternative)
+# redis>=5.0.0            # Redis cache backend
+# nltk>=3.8               # NLP utilities for better summarization
+# spacy>=3.7.0            # Advanced NLP
+
+# Development dependencies
+pytest>=7.4.0            # Testing framework
+pytest-cov>=4.1.0        # Code coverage
+black>=23.0.0            # Code formatting
+flake8>=6.1.0            # Linting
+mypy>=1.5.0              # Type checking

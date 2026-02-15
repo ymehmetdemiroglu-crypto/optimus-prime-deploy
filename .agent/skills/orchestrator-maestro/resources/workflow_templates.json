@@ -1,0 +1,100 @@
+{
+    "templates": [
+        {
+            "name": "new_product_launch",
+            "description": "Complete product launch workflow",
+            "skills": [
+                {
+                    "skill": "market-researcher",
+                    "input": {
+                        "asin": "{{product_asin}}",
+                        "depth": "comprehensive"
+                    },
+                    "output_key": "market_data"
+                },
+                {
+                    "skill": "amazon-listing-optimizer",
+                    "input": {
+                        "asin": "{{product_asin}}",
+                        "market_insights": "{{market_data}}"
+                    },
+                    "output_key": "listing_optimizations",
+                    "parallel": false
+                },
+                {
+                    "skill": "grok-admaster-operator",
+                    "action": "create_launch_campaign",
+                    "input": {
+                        "product": "{{product_asin}}",
+                        "strategy": "aggressive",
+                        "keywords": "{{market_data.keywords}}"
+                    },
+                    "parallel": false
+                }
+            ]
+        },
+        {
+            "name": "crisis_response",
+            "description": "Rapid response to performance issues",
+            "skills": [
+                {
+                    "skill": "grok-admaster-operator",
+                    "action": "get_dashboard_summary",
+                    "output_key": "current_metrics"
+                },
+                {
+                    "skill": "consciousness-engine",
+                    "action": "diagnose_issues",
+                    "input": {
+                        "metrics": "{{current_metrics}}"
+                    },
+                    "output_key": "diagnosis",
+                    "parallel": false
+                },
+                {
+                    "skill": "simulation-lab",
+                    "action": "test_recovery_strategies",
+                    "input": {
+                        "diagnosis": "{{diagnosis}}"
+                    },
+                    "output_key": "recovery_plans",
+                    "parallel": false
+                }
+            ]
+        },
+        {
+            "name": "quarterly_strategy_refresh",
+            "description": "Comprehensive quarterly review and optimization",
+            "skills": [
+                {
+                    "skill": "memory-palace",
+                    "action": "retrieve_quarterly_patterns",
+                    "output_key": "historical_insights"
+                },
+                {
+                    "skill": "knowledge-synthesizer",
+                    "action": "analyze_market_trends",
+                    "output_key": "market_trends",
+                    "parallel": true
+                },
+                {
+                    "skill": "competitive-intelligence",
+                    "action": "competitor_analysis",
+                    "output_key": "competitive_landscape",
+                    "parallel": true
+                },
+                {
+                    "skill": "evolution-engine",
+                    "action": "evolve_strategies",
+                    "input": {
+                        "history": "{{historical_insights}}",
+                        "trends": "{{market_trends}}",
+                        "competition": "{{competitive_landscape}}"
+                    },
+                    "output_key": "new_strategies",
+                    "parallel": false
+                }
+            ]
+        }
+    ]
+}

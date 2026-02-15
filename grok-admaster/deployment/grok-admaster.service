@@ -1,0 +1,42 @@
+[Unit]
+Description=Grok AdMaster AI Orchestration Engine
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=admaster
+Group=admaster
+WorkingDirectory=/opt/grok-admaster/server
+Environment="PATH=/opt/grok-admaster/venv/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="REDIS_URL=redis://localhost:6379/0"
+
+# Main process (FastAPI)
+ExecStart=/opt/grok-admaster/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Auto-restart on failure
+Restart=always
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Resource limits (Prevent OOM)
+MemoryMax=3G
+MemoryHigh=2.5G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=grok-admaster
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/grok-admaster/server/logs /opt/grok-admaster/server/data
+
+[Install]
+WantedBy=multi-user.target

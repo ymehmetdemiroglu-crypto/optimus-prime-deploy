@@ -1,0 +1,48 @@
+{
+  "status": "success",
+  "skills_tested": 9,
+  "workflow": {
+    "name": "new_product_launch",
+    "steps": [
+      "knowledge-synthesizer",
+      "memory-palace",
+      "meta-learner",
+      "simulation-lab",
+      "evolution-engine",
+      "consciousness-engine",
+      "narrative-architect"
+    ]
+  },
+  "insights": {
+    "trends": [
+      {
+        "name": "Eco-friendly packaging",
+        "momentum": "+35%",
+        "opportunity_score": 0.82
+      }
+    ],
+    "bundling": {
+      "products": [
+        "ASIN_A",
+        "ASIN_C"
+      ],
+      "co_purchase_rate": 0.28
+    }
+  },
+  "strategy": {
+    "generations": 10,
+    "initial_fitness": 0.68,
+    "final_fitness": 0.88,
+    "improvement_pct": 29.4
+  },
+  "narrative": {
+    "headline": "Your New Product Launch: Optimized for Success",
+    "story": "Based on comprehensive AI analysis, your new product is positioned for a strong launch. Market intelligence shows a 35% surge in demand for eco-friendly products in your category. We've identified a bundling opportunity with your existing product (28% co-purchase rate). Historical data from similar launches suggests profitability within 5 days using an aggressive strategy. Monte Carlo simulation (10,000 iterations) forecasts $4,500 in monthly sales with 87% probability of profit. Our evolved strategy (29% better than baseline) combines proven tactics from your top-performing campaigns with market-specific optimizations.",
+    "insights": [
+      "Eco-friendly trend momentum: +35%",
+      "Bundling opportunity identified",
+      "87% probability of profitability",
+      "Strategy evolved to 88% fitness score"
+    ]
+  }
+}

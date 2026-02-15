@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # ===================================================
+  # 1. API Server (FastAPI + Semantic Engine)
+  # ===================================================
+  api:
+    build: .
+    container_name: optimus-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./grok-admaster/server/.env
+    environment:
+      - DATABASE_URL=postgresql://optimus:${DB_PASSWORD:-optimus_secure}@db:5432/optimus_pryme
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      - REDIS_URL=redis://redis:6379/0
+      - ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===================================================
+  # 2. Autonomous Operator (The AI Pilot)
+  #    Runs as a separate process from the API.
+  # ===================================================
+  operator:
+    build: .
+    container_name: optimus-operator
+    command: [ "python", "autonomous_operator.py", "--interval", "6" ]
+    env_file:
+      - ./grok-admaster/server/.env
+    environment:
+      - DATABASE_URL=postgresql://optimus:${DB_PASSWORD:-optimus_secure}@db:5432/optimus_pryme
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: always
+
+  # ===================================================
+  # 3. PostgreSQL with pgvector (The Memory)
+  # ===================================================
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: optimus-db
+    environment:
+      - POSTGRES_USER=optimus
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-optimus_secure}
+      - POSTGRES_DB=optimus_pryme
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Auto-run the semantic schema on first boot
+      - ./grok-admaster/server/migrations/06_semantic_schema.sql:/docker-entrypoint-initdb.d/06_semantic_schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U optimus -d optimus_pryme" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===================================================
+  # 4. Redis (Scheduler State + Caching)
+  # ===================================================
+  redis:
+    image: redis:7-alpine
+    container_name: optimus-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
