@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
+from app.core.encryption import EncryptedString
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -40,18 +41,27 @@ class Profile(Base):
 
 class Credential(Base):
     """
-    Stores API tokens. Sensitive fields should be encrypted before storage.
+    Stores API tokens with automatic encryption at rest.
+
+    All sensitive fields use EncryptedString column type which:
+    - Automatically encrypts data before storage
+    - Automatically decrypts data on retrieval
+    - Uses Fernet symmetric encryption derived from SECRET_KEY
     """
     __tablename__ = "credentials"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     account_id = Column(Integer, ForeignKey("accounts.id"))
-    
-    # Store these as encrypted strings in production
-    client_id = Column(String, nullable=False)
-    client_secret = Column(String, nullable=False)
-    refresh_token = Column(String, nullable=False)
-    
+
+    # Encrypted fields - automatically encrypted/decrypted by SQLAlchemy
+    client_id = Column(EncryptedString(512), nullable=False)  # Encrypted size is larger
+    client_secret = Column(EncryptedString(512), nullable=False)
+    refresh_token = Column(EncryptedString(512), nullable=False)
+
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     account = relationship("Account", back_populates="credentials")
+
+    def __repr__(self) -> str:
+        """Safe representation that doesn't expose credentials."""
+        return f"<Credential id={self.id} account_id={self.account_id}>"

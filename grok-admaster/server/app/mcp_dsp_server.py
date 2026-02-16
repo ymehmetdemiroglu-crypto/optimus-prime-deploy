@@ -1,5 +1,8 @@
 from fastmcp import FastMCP
 from typing import List, Dict
+import logging
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("DSP-War-Room")
 
@@ -89,17 +92,18 @@ async def analyze_market_position(keyword: str, asin: str) -> Dict:
                  if p > 0:
                      avg_competitor_price += p
                      valid_prices += 1
-             except:
-                 pass
-        
+             except (ValueError, AttributeError, TypeError) as e:
+                 logger.debug(f"Failed to parse competitor price: {comp.get('price')} - {e}")
+                 continue
+
         if valid_prices > 0:
             avg_competitor_price /= valid_prices
             try:
                 our_price = float(our_item.get("price", "0").replace("$", "").replace(",", ""))
                 if our_price < avg_competitor_price:
                     opportunity += " (Price Advantage)"
-            except:
-                pass
+            except (ValueError, AttributeError, TypeError) as e:
+                logger.debug(f"Failed to parse our price: {our_item.get('price')} - {e}")
 
     return {
         "keyword": keyword,

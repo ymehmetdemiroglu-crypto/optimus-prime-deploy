@@ -3,6 +3,11 @@ Grok AdMaster API - Main Entry Point
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+
+# Initialize logging FIRST, before any other imports
+from app.core.logging_config import setup_logging
+setup_logging(env=settings.ENV, level="DEBUG" if settings.ENV == "development" else "INFO")
 
 from app.api import dashboard, anomalies, creative, settings as settings_api, audit, discovery, performance, lockdown, validation
 from app.api.dsp import dsp_api
@@ -17,8 +22,8 @@ from app.modules.amazon_ppc.anomaly import router as anomaly_detection_router
 from app.modules.amazon_ppc.competitive_intel.router import router as competitive_intel_router
 from app.api.meta_skills import router as meta_skills_router
 from app.api.rl_optimization import router as rl_budget_router
-from app.core.config import settings
 from contextlib import asynccontextmanager
+import sqlalchemy as sa
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -33,7 +38,7 @@ async def lifespan(app: FastAPI):
     from app.modules.amazon_ppc.anomaly.models import AnomalyAlert, AnomalyHistory, AnomalyTrainingData
     # Competitive Intelligence Models (Phase 7)
     from app.modules.amazon_ppc.competitive_intel.models import (
-        CompetitorPriceHistory, PriceChangeEvent, CompetitorForecast, 
+        CompetitorPriceHistory, PriceChangeEvent, CompetitorForecast,
         UndercutProbability, StrategicSimulation, KeywordCannibalization
     )
     # Semantic Intelligence Models (Phase 8)
@@ -41,11 +46,70 @@ async def lifespan(app: FastAPI):
         SearchTermEmbedding, ProductEmbedding,
         SemanticBleedLog, SemanticOpportunityLog, AutonomousPatrolLog
     )
-    
-    # Only run DB migrations/seed if NOT running tests (or handle via env var)
-    # But for now, we follow original logic
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+
+    # Initialize logging
+    from app.core.logging_config import get_logger
+    logger = get_logger(__name__)
+
+    # ===== Phase 3: Initialize Dependency Injection Container =====
+    from app.core.container import init_container, shutdown_container
+    try:
+        await init_container()
+    except Exception as e:
+        logger.error(f"Failed to initialize DI container: {e}")
+        if settings.ENV == "production":
+            raise
+
+    # ===== Phase 3: Initialize Cache Client =====
+    from app.core.cache import cache_client
+    try:
+        await cache_client.connect()
+    except Exception as e:
+        logger.warning(f"Cache client initialization failed: {e}")
+
+    # ===== Phase 3: Initialize Feature Store =====
+    from app.ml.feature_store import feature_store
+    from app.ml.feature_store.definitions import register_all_features
+    try:
+        # Set Redis client for feature caching
+        if cache_client.is_enabled:
+            feature_store._redis = cache_client._client
+
+        # Register all feature definitions
+        register_all_features(feature_store)
+        logger.info("✅ Feature store initialized with all feature groups")
+    except Exception as e:
+        logger.warning(f"Feature store initialization warning: {e}")
+
+    # Verify database migrations have been run
+    # Instead of auto-creating tables (unsafe in production), we check if they exist
+    try:
+        async with engine.begin() as conn:
+            # Check if the accounts table exists (basic migration check)
+            result = await conn.execute(
+                sa.text(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'accounts')"
+                )
+            )
+            tables_exist = result.scalar()
+
+            if not tables_exist:
+                logger.warning(
+                    "Database tables not found. Please run migrations: python manage_db.py migrate"
+                )
+                if settings.ENV == "development":
+                    logger.info("Auto-creating tables in development mode...")
+                    await conn.run_sync(Base.metadata.create_all)
+                else:
+                    raise RuntimeError(
+                        "Database not initialized. Run 'python manage_db.py migrate' before starting the application."
+                    )
+            else:
+                logger.info("Database connection verified")
+    except Exception as e:
+        logger.error(f"Database initialization check failed: {e}")
+        if settings.ENV == "production":
+            raise
         
     # Seed campaigns
     from app.db.seed import run_seed
@@ -76,9 +140,31 @@ async def lifespan(app: FastAPI):
     print("Persistent Scheduler initialized and running in background.")
         
     yield
-    # Cleanup (if any)
+
+    # ===== Cleanup Phase 3 Components =====
+    logger.info("Shutting down application...")
+
+    # Stop scheduler
     scheduler.stop()
+
+    # Shutdown cache client
+    from app.core.cache import cache_client
+    try:
+        await cache_client.disconnect()
+    except Exception as e:
+        logger.error(f"Error disconnecting cache: {e}")
+
+    # Shutdown DI container
+    from app.core.container import shutdown_container
+    try:
+        await shutdown_container()
+    except Exception as e:
+        logger.error(f"Error shutting down DI container: {e}")
+
+    # Dispose database engine
     await engine.dispose()
+
+    logger.info("✅ Application shutdown complete")
 
 app = FastAPI(
     title="Optimus Pryme API",
@@ -88,14 +174,35 @@ app = FastAPI(
 )
 
 
-# CORS Configuration (origins from env CORS_ORIGINS)
+# CORS Configuration - Restrictive whitelist approach
+# Only allow specific origins, methods, and headers needed for the application
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS_LIST,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.CORS_ORIGINS_LIST,  # Whitelist from environment
+    allow_credentials=True,  # Required for cookie-based auth
+    allow_methods=[
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS"  # Required for preflight requests
+    ],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "X-CSRF-Token"
+    ],
+    max_age=600  # Cache preflight requests for 10 minutes
 )
+
+# Add correlation ID tracking and request logging
+from app.core.middleware import CorrelationIDMiddleware, SecurityHeadersMiddleware
+app.add_middleware(CorrelationIDMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 from app.websockets import chat as chat_ws
 

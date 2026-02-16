@@ -112,21 +112,28 @@ class PriceChangeDetector:
         return []
 
     def _calculate_confidence(self, signal: np.ndarray, cp_idx: int) -> float:
-        """Calculate a confidence score (0-1) based on signal-to-noise ratio around change."""
+        """Calculate a confidence score (0-1) based on signal-to-noise ratio around change.
+
+        Returns:
+            Confidence score between 0.1 and 0.99
+            Default 0.5 if calculation fails
+        """
         try:
             window = 5
             start = max(0, cp_idx - window)
             end = min(len(signal), cp_idx + window)
-            
+
             local_variance = np.var(signal[start:end])
-            if local_variance == 0: return 1.0 # Perfect step
-            
+            if local_variance == 0:
+                return 1.0  # Perfect step
+
             # Higher variance = lower confidence
             # Inverse mapping
             confidence = 1.0 / (1.0 + local_variance)
             return min(max(confidence, 0.1), 0.99)
-        except:
-            return 0.5
+        except (IndexError, ValueError, TypeError, ZeroDivisionError) as e:
+            logger.debug(f"Confidence calculation failed at index {cp_idx}: {e}")
+            return 0.5  # Default confidence when calculation fails
 
 class CannibalizationDetector:
     """

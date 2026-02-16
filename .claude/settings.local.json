@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(xargs -I {} sh -c 'echo \"\"=== {} ===\"\" && grep \"\"^from app\\\\|^import\"\" {} | sort | uniq -c | sort -rn')",
+      "Bash(python:*)",
+      "Bash(openssl rand:*)",
+      "Bash(chmod:*)",
+      "Bash(alembic current:*)"
+    ]
+  }
+}

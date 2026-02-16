@@ -170,13 +170,26 @@ class AmazonAdsETL:
         return count
     
     def _parse_date(self, date_str: str) -> datetime:
-        """Parse Amazon API date strings."""
+        """Parse Amazon API date strings with multiple format support.
+
+        Supports:
+        - YYYYMMDD format (Amazon standard)
+        - ISO format with timezone
+
+        Returns None if parsing fails for any reason.
+        """
         if not date_str:
             return None
+
+        # Try standard Amazon format first
         try:
             return datetime.strptime(date_str, "%Y%m%d")
-        except:
-            try:
-                return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            except:
-                return None
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Failed to parse date '{date_str}' as YYYYMMDD: {e}")
+
+        # Fallback to ISO format
+        try:
+            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.warning(f"Failed to parse date '{date_str}' in any format: {e}")
+            return None
