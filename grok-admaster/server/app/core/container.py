@@ -11,6 +11,7 @@ Benefits:
 - Lazy initialization of expensive services
 """
 
+from sqlalchemy import text
 from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from typing import AsyncIterator
@@ -146,7 +147,7 @@ async def init_container() -> None:
     try:
         engine = container.db_engine()
         async with engine.connect() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         logger.info("✅ Database connection verified via DI container")
     except Exception as e:
         logger.error(f"❌ Database connection failed: {e}")

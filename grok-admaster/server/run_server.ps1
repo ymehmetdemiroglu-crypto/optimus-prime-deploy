@@ -1,3 +1,2 @@
 Write-Host "Starting Grok-AdMaster Server with proper exclusions..."
-& ".\venv\Scripts\Activate.ps1"
-uvicorn app.main:app --reload --reload-exclude "venv" --reload-exclude "__pycache__"
+& ".\venv\Scripts\python.exe" -m uvicorn app.main:app --reload --reload-exclude "venv" --reload-exclude "__pycache__"

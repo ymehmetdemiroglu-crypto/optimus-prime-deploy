@@ -19,11 +19,12 @@ Usage:
     )
 """
 
-from app.ml.feature_store.registry import FeatureStore, Feature, FeatureGroup
+from app.ml.feature_store.registry import FeatureStore, Feature, FeatureGroup, feature_store
 from app.ml.feature_store.definitions import campaign_features, account_features
 
 __all__ = [
     "FeatureStore",
+    "feature_store",
     "Feature",
     "FeatureGroup",
     "campaign_features",
