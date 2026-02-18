@@ -8,16 +8,20 @@ interface BadgeProps {
 }
 
 const variantStyles = {
-  default: 'bg-slate-700 text-slate-300',
-  success: 'bg-profit/20 text-profit',
-  warning: 'bg-warning/20 text-warning',
-  danger: 'bg-danger/20 text-danger',
-  info: 'bg-electric/20 text-electric',
+  default: 'bg-surface-high text-[var(--text-muted)] border border-[var(--border)]',
+  success: 'bg-profit/10 text-profit border border-profit/20',
+  warning: 'bg-warning/10 text-warning border border-warning/20',
+  danger:  'bg-danger/10 text-danger border border-danger/20',
+  info:    'bg-electric/10 text-electric border border-electric/20',
 }
 
 function Badge({ variant = 'default', children, className }: BadgeProps) {
   return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', variantStyles[variant], className)}>
+    <span className={cn(
+      'inline-flex items-center px-2 py-0.5 rounded-geometric text-xs font-medium tracking-wide',
+      variantStyles[variant],
+      className,
+    )}>
       {children}
     </span>
   )

@@ -15,17 +15,25 @@ interface MetricCardProps {
 
 function MetricCard({ title, value, format, icon, trend, trendValue, className }: MetricCardProps) {
   return (
-    <div className={cn('card-sanctuary p-6', className)}>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm font-medium text-slate-400">{title}</p>
-        {icon && <span className="text-slate-500">{icon}</span>}
+    <div className={cn('card-sanctuary p-5', className)}>
+      <div className="flex items-start justify-between mb-4">
+        <p className="text-xs font-medium uppercase tracking-wider text-[var(--text-subtle)]">{title}</p>
+        {icon && <span className="text-[var(--text-subtle)] opacity-60">{icon}</span>}
       </div>
-      <p className="text-3xl font-bold text-slate-100 font-data">
+
+      <p className="text-2xl font-bold text-[var(--text-primary)] font-data leading-none">
         {formatMetric(value, format)}
       </p>
+
       {trend && trend !== 'flat' && (
-        <div className={cn('flex items-center gap-1 mt-2 text-sm', trend === 'up' ? 'metric-positive' : 'metric-negative')}>
-          {trend === 'up' ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+        <div className={cn(
+          'flex items-center gap-1.5 mt-3 text-xs font-medium',
+          trend === 'up' ? 'metric-positive' : 'metric-negative',
+        )}>
+          {trend === 'up'
+            ? <TrendingUp className="h-3.5 w-3.5" />
+            : <TrendingDown className="h-3.5 w-3.5" />
+          }
           {trendValue && <span>{trendValue}</span>}
         </div>
       )}

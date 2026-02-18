@@ -13,7 +13,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        'card-sanctuary p-6',
+        'card-sanctuary p-6 transition-shadow duration-200',
         variant === 'glow' && 'ai-glow',
         className,
       )}
@@ -28,7 +28,7 @@ const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('mb-4 flex items-center justify-between', className)}
+      className={cn('mb-5 flex items-center justify-between', className)}
       {...props}
     />
   ),
@@ -40,7 +40,7 @@ const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingEleme
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn('font-serif font-bold text-slate-100', className)}
+      className={cn('font-serif font-semibold text-[var(--text-primary)] text-lg', className)}
       {...props}
     />
   ),

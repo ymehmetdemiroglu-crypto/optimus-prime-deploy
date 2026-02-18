@@ -1,26 +1,25 @@
 import { useAuth } from '@/hooks/useAuth'
 import { AccountSwitcher } from './AccountSwitcher'
 import { Button } from '@/components/ui/Button'
-import { LogOut, User } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
 function Header() {
   const { user, logout } = useAuth()
 
   return (
-    <header className="h-16 bg-panel border-b border-slate-800 flex items-center justify-between px-6 shrink-0">
+    <header className="h-14 bg-panel border-b border-[var(--border)] flex items-center justify-between px-6 shrink-0">
       <AccountSwitcher />
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-3 text-sm">
-          <User className="h-5 w-5 text-slate-400" />
-          <div>
-            <p className="text-slate-200 font-medium">{user?.full_name}</p>
-            <p className="text-slate-500 text-xs capitalize">{user?.role}</p>
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="text-right">
+          <p className="text-sm font-medium text-[var(--text-primary)] leading-tight">{user?.full_name}</p>
+          <p className="text-[10px] text-[var(--text-subtle)] uppercase tracking-wider capitalize">{user?.role}</p>
         </div>
 
-        <Button variant="ghost" size="sm" onClick={logout} icon={<LogOut className="h-4 w-4" />}>
-          Logout
+        <div className="w-px h-6 bg-[var(--border)]" />
+
+        <Button variant="ghost" size="sm" onClick={logout} icon={<LogOut className="h-3.5 w-3.5" />}>
+          Sign out
         </Button>
       </div>
     </header>
