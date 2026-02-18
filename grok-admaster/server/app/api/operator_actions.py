@@ -11,11 +11,12 @@ Endpoints:
 - POST /operator-actions/bulk-approve    → Bulk-approve by account/asin/type
 - GET  /operator-actions/history         → Reviewed actions (audit trail)
 """
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -185,9 +186,13 @@ async def get_reviewed_actions(
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 async def _get_pending(db: AsyncSession, action_id: str) -> ActionReviewQueue:
+    try:
+        uid = uuid.UUID(action_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Invalid action ID: {action_id!r}")
     result = await db.execute(
         select(ActionReviewQueue).where(
-            ActionReviewQueue.id == action_id,
+            ActionReviewQueue.id == uid,
             ActionReviewQueue.status == "pending_review",
         )
     )

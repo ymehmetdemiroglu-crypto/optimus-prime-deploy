@@ -16,7 +16,6 @@ from typing import Optional, List, Dict, Any
 
 from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_user
-from app.modules.auth.models import User
 from app.services.analytics.semantic_engine import SemanticIngestor, BleedDetector, OpportunityFinder
 
 # All semantic endpoints require a valid JWT — they trigger data ingestion and
