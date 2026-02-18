@@ -2,6 +2,8 @@
 Ensemble Model System - Combines multiple ML models for robust predictions.
 Implements stacking, voting, and weighted averaging.
 """
+import json
+import os
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple, Callable
 from dataclasses import dataclass
@@ -13,6 +15,8 @@ from .rl_agent import PPCRLAgent
 from .bandits import BidBanditOptimizer
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_WEIGHTS_PATH = "models/ensemble_weights.json"
 
 
 @dataclass
@@ -29,30 +33,67 @@ class ModelEnsemble:
     """
     Ensemble of ML models for bid optimization.
     Combines predictions using adaptive weighting.
+
+    Weights are persisted to disk so they survive process restarts.
+    Call update_weights() with observed outcomes to adapt the ensemble.
     """
-    
-    def __init__(self):
+
+    _DEFAULT_WEIGHTS = {
+        'gradient_boost': 0.30,
+        'deep_nn': 0.25,
+        'rl_agent': 0.25,
+        'bandit': 0.20,
+    }
+
+    def __init__(self, weights_path: str = _DEFAULT_WEIGHTS_PATH):
         # Initialize all models
         self.gradient_boost = BidOptimizer()
         self.deep_nn = DeepBidOptimizer()
         self.rl_agent = PPCRLAgent()
         self.bandit = BidBanditOptimizer()
-        
-        # Model weights (learned from performance)
-        self.model_weights = {
-            'gradient_boost': 0.30,
-            'deep_nn': 0.25,
-            'rl_agent': 0.25,
-            'bandit': 0.20
-        }
-        
+        self.weights_path = weights_path
+
         # Performance tracking for adaptive weighting
         self.model_performance: Dict[str, List[float]] = {
             'gradient_boost': [],
             'deep_nn': [],
             'rl_agent': [],
-            'bandit': []
+            'bandit': [],
         }
+
+        # Load persisted weights if available, otherwise use defaults
+        self.model_weights = self._load_weights()
+
+    def _load_weights(self) -> Dict[str, float]:
+        """Load model weights from disk; fall back to defaults on any error."""
+        if os.path.exists(self.weights_path):
+            try:
+                with open(self.weights_path) as f:
+                    saved = json.load(f)
+                weights = saved.get('weights', {})
+                performance = saved.get('performance', {})
+                # Validate all expected keys are present
+                if set(weights.keys()) == set(self._DEFAULT_WEIGHTS.keys()):
+                    self.model_performance = {
+                        k: performance.get(k, []) for k in self._DEFAULT_WEIGHTS
+                    }
+                    logger.info(f"Loaded ensemble weights from {self.weights_path}: {weights}")
+                    return weights
+            except Exception as e:
+                logger.warning(f"Failed to load ensemble weights from {self.weights_path}: {e}")
+        return dict(self._DEFAULT_WEIGHTS)
+
+    def _save_weights(self) -> None:
+        """Persist current weights and performance history to disk."""
+        try:
+            os.makedirs(os.path.dirname(self.weights_path) or ".", exist_ok=True)
+            with open(self.weights_path, "w") as f:
+                json.dump({
+                    'weights': self.model_weights,
+                    'performance': {k: v[-100:] for k, v in self.model_performance.items()},
+                }, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to persist ensemble weights: {e}")
     
     def predict(
         self,
@@ -161,35 +202,41 @@ class ModelEnsemble:
                 model: perf / total_perf
                 for model, perf in avg_performance.items()
             }
-        
+
         logger.info(f"Updated model weights: {self.model_weights}")
+        self._save_weights()
     
     def get_model_status(self) -> Dict[str, Any]:
         """Get status of all models in the ensemble."""
         return {
             'gradient_boost': {
+                # is_trained is now a property on BidOptimizer (delegates to market_model)
                 'is_trained': self.gradient_boost.is_trained,
                 'weight': self.model_weights['gradient_boost'],
-                'avg_performance': np.mean(self.model_performance['gradient_boost']) 
-                    if self.model_performance['gradient_boost'] else None
+                'avg_performance': float(np.mean(self.model_performance['gradient_boost']))
+                    if self.model_performance['gradient_boost'] else None,
             },
             'deep_nn': {
                 'is_trained': self.deep_nn.is_trained,
                 'weight': self.model_weights['deep_nn'],
-                'avg_performance': np.mean(self.model_performance['deep_nn']) 
-                    if self.model_performance['deep_nn'] else None
+                'avg_performance': float(np.mean(self.model_performance['deep_nn']))
+                    if self.model_performance['deep_nn'] else None,
             },
             'rl_agent': {
-                'states_explored': len(self.rl_agent.q_table),
+                # DQN agent uses a neural network, not a Q-table.
+                # Expose steps_done (training steps) and current epsilon instead.
+                'steps_done': self.rl_agent.steps_done,
+                'epsilon': round(self.rl_agent.epsilon, 4),
+                'explore_steps': self.rl_agent._explore_steps,
                 'weight': self.model_weights['rl_agent'],
-                'avg_performance': np.mean(self.model_performance['rl_agent']) 
-                    if self.model_performance['rl_agent'] else None
+                'avg_performance': float(np.mean(self.model_performance['rl_agent']))
+                    if self.model_performance['rl_agent'] else None,
             },
             'bandit': {
                 'weight': self.model_weights['bandit'],
-                'avg_performance': np.mean(self.model_performance['bandit']) 
-                    if self.model_performance['bandit'] else None
-            }
+                'avg_performance': float(np.mean(self.model_performance['bandit']))
+                    if self.model_performance['bandit'] else None,
+            },
         }
 
 

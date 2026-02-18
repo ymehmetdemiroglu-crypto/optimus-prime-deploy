@@ -2,33 +2,49 @@
 """
 API Endpoints for Hierarchical Reinforcement Learning Budget Allocation.
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.modules.auth.dependencies import get_current_user
 from app.modules.amazon_ppc.ml.hierarchical_rl import HierarchicalBudgetController
 
-router = APIRouter()
+# All RL budget endpoints require a valid JWT — they can trigger live budget
+# reallocations across client ad accounts.
+router = APIRouter(dependencies=[Depends(get_current_user)])
+
 
 class AllocationRequest(BaseModel):
     profile_id: str
     total_budget: float
     dry_run: bool = True
 
+
 class ModelUpdateRequest(BaseModel):
     profile_id: str
     lookback_days: int = 1
 
+
+class EnsembleOutcome(BaseModel):
+    """A single observed outcome used to update ensemble model weights."""
+    model_predictions: Dict[str, float]  # {model_name: predicted_bid}
+    actual_optimal_bid: float            # observed ideal bid in retrospect
+
+
+class EnsembleOutcomesRequest(BaseModel):
+    outcomes: List[EnsembleOutcome]
+
+
 @router.post("/allocate")
 async def run_budget_allocation(
     request: AllocationRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Trigger the hierarchical budget allocation process for a profile.
-    
+
     - **profile_id**: The Amazon profile ID.
     - **total_budget**: Total daily budget to distribute.
     - **dry_run**: If True, only simulates allocations without saving actions as pending.
@@ -38,45 +54,65 @@ async def run_budget_allocation(
         result = await controller.run_allocation(
             profile_id=request.profile_id,
             total_budget=request.total_budget,
-            dry_run=request.dry_run
+            dry_run=request.dry_run,
         )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Allocation failed: {str(e)}")
 
+
 @router.post("/learn")
 async def trigger_learning_update(
     request: ModelUpdateRequest,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Trigger the learning update step (policy gradient) based on recent outcomes.
-    This can be expensive, so it runs in the background.
+    Trigger the REINFORCE policy-gradient update for the portfolio agent based
+    on recent budget allocation outcomes. Runs synchronously — the policy matrix
+    update is fast (small linear algebra, no deep network training).
     """
-    
-    async def _run_learning(profile_id: str, lookback: int):
-        # We need a new session for background task if the request session closes
-        # But here we are passing logic to controller which uses session.
-        # Actually, background tasks should manage their own sessions or usage.
-        # For simplicity in this architecture, we await it if it's fast, or use a task runner.
-        # Since learn_from_outcomes is DB-intensive but not CP-intensive heavy computation (like training deep nets),
-        # we can await it or run it.
-        # The controller expects an active session.
-        pass
-
-    # For now, run synchronously to ensure we can return the result status.
-    # Policy gradient update on small matrices is fast.
     controller = HierarchicalBudgetController(db)
     try:
         result = await controller.learn_from_outcomes(
             profile_id=request.profile_id,
-            lookback_days=request.lookback_days
+            lookback_days=request.lookback_days,
         )
         return result
     except Exception as e:
-        # Log error instead of crashing if possible, but here we raise
         raise HTTPException(status_code=500, detail=f"Learning update failed: {str(e)}")
+
+
+@router.post("/ensemble/update-weights")
+async def update_ensemble_weights(
+    request: EnsembleOutcomesRequest,
+) -> Dict[str, Any]:
+    """
+    Update and persist ModelEnsemble adaptive weights based on observed outcomes.
+
+    Send model predictions alongside the retrospectively-known optimal bid for
+    each keyword decision. The ensemble adjusts weights (higher for models that
+    were closer to optimal) and persists them to disk so they survive restarts.
+
+    Example payload::
+
+        {
+          "outcomes": [
+            {
+              "model_predictions": {"gradient_boost": 1.20, "deep_nn": 1.15, "rl_agent": 1.18, "bandit": 1.22},
+              "actual_optimal_bid": 1.17
+            }
+          ]
+        }
+    """
+    from app.modules.amazon_ppc.ml.ensemble import ModelEnsemble
+    ensemble = ModelEnsemble()
+    outcome_dicts = [o.model_dump() for o in request.outcomes]
+    ensemble.update_weights(outcome_dicts)
+    return {
+        "status": "weights_updated",
+        "new_weights": ensemble.model_weights,
+        "outcomes_processed": len(outcome_dicts),
+    }
 
 @router.get("/state/{profile_id}")
 async def get_latest_portfolio_state(

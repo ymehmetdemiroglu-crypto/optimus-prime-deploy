@@ -71,7 +71,7 @@ class SemanticOpportunityLog(Base):
 
 class AutonomousPatrolLog(Base):
     __tablename__ = "autonomous_patrol_log"
-    
+
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patrol_cycle = Column(Integer, nullable=False)
     action_type = Column(String(50), nullable=False)
@@ -79,3 +79,37 @@ class AutonomousPatrolLog(Base):
     details = Column(JSON)
     status = Column(String(50), default="success")
     executed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class ActionReviewQueue(Base):
+    """
+    Staging table for autonomous recommendations pending human approval.
+
+    Every bleed / opportunity action is written here with
+    status='pending_review' before it is applied downstream.
+    An admin approves or rejects via the /operator-actions API.
+
+    Status transitions:
+        pending_review → approved  (cleared for execution)
+        pending_review → rejected  (discarded)
+        approved       → executed  (applied to Amazon / downstream system)
+    """
+    __tablename__ = "action_review_queue"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    patrol_cycle = Column(Integer, nullable=False)
+    account_id = Column(Integer)
+    asin = Column(String(20))
+    action_type = Column(String(50), nullable=False)   # 'add_negative' | 'add_target'
+    term = Column(Text, nullable=False)
+    semantic_similarity = Column(Numeric(6, 4))
+    spend_at_detection = Column(Numeric(15, 2))
+    suggested_bid = Column(Numeric(10, 2))
+    suggested_match_type = Column(String(20))
+    urgency = Column(String(20), default="MEDIUM")
+    status = Column(String(30), default="pending_review")
+    reviewed_by = Column(String(255))
+    reviewed_at = Column(DateTime(timezone=True))
+    review_note = Column(Text)
+    details = Column(JSON)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

@@ -44,51 +44,81 @@ class PPCRLAgent:
         self,
         learning_rate: float = 0.001,
         discount_factor: float = 0.95,
-        exploration_rate: float = 0.1,
+        exploration_rate: float = 1.0,
+        epsilon_end: float = 0.02,
+        epsilon_decay_steps: int = 10_000,
         model_path: Optional[str] = None
     ):
         self.gamma = discount_factor
-        self.epsilon = exploration_rate
+        # Epsilon schedule: linear anneal from exploration_rate → epsilon_end
+        # over epsilon_decay_steps explore calls, then held at epsilon_end.
+        self.epsilon_start = exploration_rate
+        self.epsilon_end = epsilon_end
+        self.epsilon_decay_steps = epsilon_decay_steps
+        self.epsilon = exploration_rate   # current value, updated by _decay_epsilon()
+        self._explore_steps = 0           # counts calls where explore=True
+
         self.model_path = model_path or "models/rl_agent_dqn.pth"
-        
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         # DQN Networks
         self.policy_net = DQN(self.STATE_SIZE, len(self.ACTIONS)).to(self.device)
         self.target_net = DQN(self.STATE_SIZE, len(self.ACTIONS)).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
-        
+
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=learning_rate)
         self.criterion = nn.MSELoss()
-        
+
         self.memory = ReplayBuffer(capacity=10000)
         self.batch_size = 32
         self.update_target_every = 100
         self.steps_done = 0
-        
+
         self._load_model()
-    
+
+    def _decay_epsilon(self) -> None:
+        """Linearly anneal epsilon after each exploration step.
+
+        Decays from epsilon_start → epsilon_end over epsilon_decay_steps steps,
+        then stays flat at epsilon_end. This eliminates permanent random exploration
+        in production while preserving early-training exploration.
+        """
+        self._explore_steps += 1
+        progress = min(self._explore_steps / max(self.epsilon_decay_steps, 1), 1.0)
+        self.epsilon = self.epsilon_start + progress * (self.epsilon_end - self.epsilon_start)
+
     def _load_model(self):
-        """Load pre-trained model if exists."""
+        """Load pre-trained model if exists, restoring epsilon schedule state."""
         if os.path.exists(self.model_path):
             try:
                 checkpoint = torch.load(self.model_path, map_location=self.device)
                 self.policy_net.load_state_dict(checkpoint['model_state_dict'])
                 self.target_net.load_state_dict(checkpoint['model_state_dict'])
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                logger.info(f"Loaded DQN agent from {self.model_path}")
+                # Restore epsilon schedule so decay continues correctly after reload
+                self._explore_steps = checkpoint.get('explore_steps', 0)
+                self.steps_done = checkpoint.get('steps_done', 0)
+                self.epsilon = checkpoint.get('epsilon', self.epsilon_start)
+                logger.info(
+                    f"Loaded DQN agent from {self.model_path} "
+                    f"(epsilon={self.epsilon:.3f}, explore_steps={self._explore_steps})"
+                )
             except Exception as e:
                 logger.warning(f"Failed to load DQN model: {e}")
-    
+
     def save_model(self):
-        """Save model to disk."""
+        """Save model and epsilon schedule state to disk."""
         os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
         torch.save({
             'model_state_dict': self.policy_net.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'epsilon': self.epsilon,
+            'explore_steps': self._explore_steps,
+            'steps_done': self.steps_done,
         }, self.model_path)
-        logger.info(f"Saved DQN agent to {self.model_path}")
+        logger.info(f"Saved DQN agent to {self.model_path} (epsilon={self.epsilon:.3f})")
 
     def _get_state_vector(self, features: Dict[str, Any], target_acos: float = 25.0) -> np.ndarray:
         """Convert features to continuous state vector."""
@@ -114,17 +144,24 @@ class PPCRLAgent:
         return np.array([acos_ratio, momentum, spend_trend, cpc_volatility, cvr, bid], dtype=np.float32)
 
     def select_action(self, features: Dict[str, Any], current_bid: float, target_acos: float = 25.0, explore: bool = True) -> RLAction:
-        """Select action using epsilon-greedy policy with DQN."""
+        """Select action using epsilon-greedy policy with DQN.
+
+        When explore=True, decays epsilon after each call (linear schedule from
+        epsilon_start → epsilon_end over epsilon_decay_steps steps). Inference
+        calls (explore=False) do not consume the epsilon budget.
+        """
         state = self._get_state_vector(features, target_acos)
-        
-        if explore and np.random.random() < self.epsilon:
-            action_id = np.random.randint(len(self.ACTIONS))
-        else:
-            with torch.no_grad():
-                state_t = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-                q_values = self.policy_net(state_t)
-                action_id = q_values.argmax().item()
-                
+
+        if explore:
+            self._decay_epsilon()
+            if np.random.random() < self.epsilon:
+                return self.ACTIONS[np.random.randint(len(self.ACTIONS))]
+
+        with torch.no_grad():
+            state_t = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            q_values = self.policy_net(state_t)
+            action_id = q_values.argmax().item()
+
         return self.ACTIONS[action_id]
 
     def _train_step(self):

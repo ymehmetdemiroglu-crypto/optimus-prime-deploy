@@ -59,6 +59,11 @@ class BidOptimizer:
         self.learning_adapter = learning_adapter or LearningRateAdapter()
         self.config = config or BidStrategyConfig()
 
+    @property
+    def is_trained(self) -> bool:
+        """Delegate to the inner MarketResponseModel's training state."""
+        return self.market_model.is_trained
+
     def train(
         self, 
         training_data: List[Dict[str, Any]],

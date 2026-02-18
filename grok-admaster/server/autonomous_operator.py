@@ -35,7 +35,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from app.core.database import get_db_session, engine, Base
 from app.services.analytics.semantic_engine import SemanticIngestor, BleedDetector, OpportunityFinder
 from app.services.openrouter_service import OpenRouterClient
-from app.models.semantic import AutonomousPatrolLog
+from app.models.semantic import AutonomousPatrolLog, ActionReviewQueue
 
 # Configure logging
 logging.basicConfig(
@@ -58,19 +58,30 @@ class AutonomousOperator:
         self,
         patrol_interval_hours: float = 6.0,
         dry_run: bool = False,
+        require_approval: bool = True,
         bleed_threshold: float = 0.40,
         opportunity_floor: float = 0.70
     ):
         self.patrol_interval = patrol_interval_hours * 3600  # Convert to seconds
         self.dry_run = dry_run
+        # When require_approval=True (the safe default for live mode), the operator
+        # writes findings to action_review_queue with status='pending_review' and
+        # waits for a human admin to approve before executing downstream. This
+        # breaks the direct detection → execution path that previously had no gate.
+        self.require_approval = require_approval
         self.bleed_threshold = bleed_threshold
         self.opportunity_floor = opportunity_floor
         self.patrol_cycle = 0
         self.ai_client = OpenRouterClient()
-        
+
+        mode_label = (
+            "DRY RUN (Simulation)"
+            if dry_run
+            else ("LIVE — Pending Approval Queue" if require_approval else "LIVE — Auto-Execute (NO GATE)")
+        )
         logger.info("=" * 60)
         logger.info("  OPTIMUS PRIME — AUTONOMOUS OPERATOR INITIALIZED")
-        logger.info(f"  Mode: {'DRY RUN (Simulation)' if dry_run else 'LIVE (Actions will execute)'}")
+        logger.info(f"  Mode: {mode_label}")
         logger.info(f"  Patrol Interval: {patrol_interval_hours} hours")
         logger.info(f"  Bleed Threshold: {bleed_threshold}")
         logger.info(f"  Opportunity Floor: {opportunity_floor}")
@@ -215,17 +226,42 @@ class AutonomousOperator:
                 f"      → \"{bleed['term']}\" | similarity={bleed['semantic_similarity']:.2f} "
                 f"| spend=${bleed['spend']:.2f} | urgency={bleed['urgency']}"
             )
-            
+
             if not self.dry_run:
-                # Log the action
-                await detector.log_bleed_action(
-                    search_term_embedding_id=bleed["embedding_id"],
-                    product_embedding_id=bleed["product_embedding_id"],
-                    semantic_distance=1.0 - bleed["semantic_similarity"],
-                    spend=bleed["spend"],
-                    action="negative_added",
-                    operator="autonomous"
-                )
+                if self.require_approval:
+                    # Gate: stage the recommendation for human review before execution.
+                    queue_entry = ActionReviewQueue(
+                        patrol_cycle=self.patrol_cycle,
+                        account_id=account_id,
+                        asin=asin,
+                        action_type="add_negative",
+                        term=bleed["term"],
+                        semantic_similarity=bleed["semantic_similarity"],
+                        spend_at_detection=bleed["spend"],
+                        urgency=bleed["urgency"],
+                        status="pending_review",
+                        details={
+                            "embedding_id": bleed["embedding_id"],
+                            "product_embedding_id": bleed["product_embedding_id"],
+                            "clicks": bleed["clicks"],
+                            "impressions": bleed["impressions"],
+                            "acos": bleed["acos"],
+                        },
+                    )
+                    db.add(queue_entry)
+                else:
+                    # No gate: execute immediately (legacy behavior, not recommended).
+                    await detector.log_bleed_action(
+                        search_term_embedding_id=bleed["embedding_id"],
+                        product_embedding_id=bleed["product_embedding_id"],
+                        semantic_distance=1.0 - bleed["semantic_similarity"],
+                        spend=bleed["spend"],
+                        action="negative_added",
+                        operator="autonomous",
+                    )
+
+        if not self.dry_run:
+            await db.commit()
         
         await self._log_action(db, "bleed_detect", asin, {
             "terms_found": len(bleeds),
@@ -268,13 +304,41 @@ class AutonomousOperator:
             )
             
             if not self.dry_run:
-                await finder.log_opportunity(
-                    term=opp["term"],
-                    asin=asin,
-                    similarity=opp["semantic_similarity"],
-                    match_type=opp["suggested_match_type"],
-                    bid=opp["suggested_bid"]
-                )
+                if self.require_approval:
+                    # Gate: stage for human review.
+                    queue_entry = ActionReviewQueue(
+                        patrol_cycle=self.patrol_cycle,
+                        account_id=account_id,
+                        asin=asin,
+                        action_type="add_target",
+                        term=opp["term"],
+                        semantic_similarity=opp["semantic_similarity"],
+                        suggested_bid=opp["suggested_bid"],
+                        suggested_match_type=opp["suggested_match_type"],
+                        urgency="HIGH" if opp["confidence"] == "HIGH" else "MEDIUM",
+                        status="pending_review",
+                        details={
+                            "impressions": opp["impressions"],
+                            "clicks": opp["clicks"],
+                            "sales": opp["sales"],
+                            "orders": opp["orders"],
+                            "acos": opp["acos"],
+                            "confidence": opp["confidence"],
+                        },
+                    )
+                    db.add(queue_entry)
+                else:
+                    # No gate: execute immediately (legacy behavior, not recommended).
+                    await finder.log_opportunity(
+                        term=opp["term"],
+                        asin=asin,
+                        similarity=opp["semantic_similarity"],
+                        match_type=opp["suggested_match_type"],
+                        bid=opp["suggested_bid"],
+                    )
+
+        if not self.dry_run:
+            await db.commit()
         
         await self._log_action(db, "opportunity_find", asin, {
             "terms_found": len(opportunities),
@@ -359,6 +423,8 @@ async def main():
     parser = argparse.ArgumentParser(description="Optimus Prime Autonomous Operator")
     parser.add_argument("--once", action="store_true", help="Run one patrol cycle and exit")
     parser.add_argument("--dry-run", action="store_true", help="Simulate without executing actions")
+    parser.add_argument("--no-approval-gate", action="store_true",
+                        help="Disable human approval gate — execute autonomously (USE WITH CAUTION)")
     parser.add_argument("--interval", type=float, default=6.0, help="Hours between patrols (default: 6)")
     parser.add_argument("--bleed-threshold", type=float, default=0.40, help="Bleed similarity threshold (0-1)")
     parser.add_argument("--opportunity-floor", type=float, default=0.70, help="Opportunity similarity floor (0-1)")
@@ -375,8 +441,9 @@ async def main():
     operator = AutonomousOperator(
         patrol_interval_hours=args.interval,
         dry_run=args.dry_run,
+        require_approval=not args.no_approval_gate,
         bleed_threshold=args.bleed_threshold,
-        opportunity_floor=args.opportunity_floor
+        opportunity_floor=args.opportunity_floor,
     )
     
     if args.once:

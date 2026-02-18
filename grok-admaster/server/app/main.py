@@ -245,6 +245,10 @@ app.include_router(market_intel_router, prefix="/api/v1/market-intelligence", ta
 from app.api.semantic import router as semantic_router
 app.include_router(semantic_router, prefix="/api/v1/semantic", tags=["Semantic Intelligence"])
 
+# Operator Action Review API (Approval Gate)
+from app.api.operator_actions import router as operator_actions_router
+app.include_router(operator_actions_router, prefix="/api/v1/operator-actions", tags=["Operator Action Review"])
+
 
 
 @app.get("/")

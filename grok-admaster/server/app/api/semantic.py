@@ -15,9 +15,13 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.core.database import get_db
+from app.modules.auth.dependencies import get_current_user
+from app.modules.auth.models import User
 from app.services.analytics.semantic_engine import SemanticIngestor, BleedDetector, OpportunityFinder
 
-router = APIRouter()
+# All semantic endpoints require a valid JWT — they trigger data ingestion and
+# expose account-level financial data, so unauthenticated access is unacceptable.
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 # --- Request Models ---
@@ -35,7 +39,8 @@ class EmbedProductRequest(BaseModel):
 class BleedRequest(BaseModel):
     asin: str
     account_id: int
-    similarity_threshold: float = 0.40
+    product_category: Optional[str] = None  # e.g. 'electronics', 'grocery', 'apparel'
+    similarity_threshold: Optional[float] = None  # None → auto-resolve from category
     min_spend: float = 1.00
 
 class OpportunityRequest(BaseModel):
@@ -99,8 +104,9 @@ async def detect_bleed(request: BleedRequest, db: AsyncSession = Depends(get_db)
     results = await detector.detect_bleed(
         asin=request.asin,
         account_id=request.account_id,
-        similarity_threshold=request.similarity_threshold,
-        min_spend=request.min_spend
+        similarity_threshold=request.similarity_threshold,  # None → resolved from category
+        product_category=request.product_category,
+        min_spend=request.min_spend,
     )
     
     total_waste = sum(r["spend"] for r in results)
