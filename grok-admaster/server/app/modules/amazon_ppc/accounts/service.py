@@ -7,8 +7,9 @@ from .schemas import AccountCreate, CredentialCreate
 class AccountService:
     async def create_account(self, db: AsyncSession, account_in: AccountCreate) -> Account:
         account = Account(
-            company_name=account_in.company_name,
-            primary_contact_email=account_in.primary_contact_email
+            name=account_in.name,
+            amazon_account_id=account_in.amazon_account_id,
+            region=account_in.region,
         )
         db.add(account)
         await db.commit()

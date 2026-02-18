@@ -43,6 +43,7 @@ class PPCCampaign(Base):
     profile_id = Column(String, ForeignKey("profiles.profile_id"), index=True)
     
     name = Column(String, index=True)
+    portfolio_id = Column(String, nullable=True, index=True)  # Amazon Portfolio ID
     campaign_type = Column(String)  # sponsoredProducts, sponsoredBrands, etc.
     targeting_type = Column(String)  # manual / auto
     state = Column(String)

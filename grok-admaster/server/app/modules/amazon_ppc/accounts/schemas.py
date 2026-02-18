@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
@@ -12,7 +12,7 @@ class ProfileBase(BaseModel):
 
 class ProfileRead(ProfileBase):
     account_id: int
-    
+
     class Config:
         from_attributes = True
 
@@ -25,16 +25,17 @@ class CredentialCreate(CredentialBase):
     account_id: int
 
 class AccountBase(BaseModel):
-    company_name: str
-    primary_contact_email: Optional[EmailStr] = None
+    name: str
+    amazon_account_id: str
+    region: str = "NA"
 
 class AccountCreate(AccountBase):
     pass
 
 class AccountRead(AccountBase):
     id: int
+    status: str
     created_at: datetime
-    is_active: bool
     profiles: List[ProfileRead] = []
 
     class Config:

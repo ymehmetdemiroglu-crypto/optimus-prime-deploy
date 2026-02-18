@@ -302,15 +302,22 @@ class AnomalyDetectionService:
         """Fetch historical time-series data for LSTM detector."""
         since_date = datetime.utcnow() - timedelta(days=days)
         
-        # Query performance metrics
-        query = select(PerformanceMetric).where(
-            and_(
-                PerformanceMetric.entity_type == entity_type.value,
-                PerformanceMetric.entity_id == entity_id,
-                PerformanceMetric.date >= since_date,
+        # Build entity-specific filter (PerformanceRecord uses campaign_id/keyword_id, not entity_type/entity_id)
+        if entity_type == EntityType.KEYWORD:
+            entity_filter = PerformanceRecord.keyword_id == int(entity_id)
+        else:  # CAMPAIGN
+            entity_filter = and_(
+                PerformanceRecord.campaign_id == int(entity_id),
+                PerformanceRecord.keyword_id.is_(None),
             )
-        ).order_by(PerformanceMetric.date.asc())
-        
+
+        query = select(PerformanceRecord).where(
+            and_(
+                entity_filter,
+                PerformanceRecord.date >= since_date,
+            )
+        ).order_by(PerformanceRecord.date.asc())
+
         result = await db.execute(query)
         metrics = result.scalars().all()
         
@@ -338,13 +345,18 @@ class AnomalyDetectionService:
         entity_id: str,
     ) -> Optional[Dict[str, float]]:
         """Extract current features for streaming detector."""
-        # Get latest metric
-        query = select(PerformanceMetric).where(
-            and_(
-                PerformanceMetric.entity_type == entity_type.value,
-                PerformanceMetric.entity_id == entity_id,
+        # Get latest metric using PerformanceRecord (filtered by campaign_id or keyword_id)
+        if entity_type == EntityType.KEYWORD:
+            entity_filter = PerformanceRecord.keyword_id == int(entity_id)
+        else:  # CAMPAIGN
+            entity_filter = and_(
+                PerformanceRecord.campaign_id == int(entity_id),
+                PerformanceRecord.keyword_id.is_(None),
             )
-        ).order_by(PerformanceMetric.date.desc()).limit(1)
+
+        query = select(PerformanceRecord).where(entity_filter).order_by(
+            PerformanceRecord.date.desc()
+        ).limit(1)
         
         result = await db.execute(query)
         metric = result.scalar_one_or_none()

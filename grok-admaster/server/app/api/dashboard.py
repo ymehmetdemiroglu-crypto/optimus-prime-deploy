@@ -112,6 +112,8 @@ async def get_ai_actions(db: AsyncSession = Depends(get_db)):
             print(f"Error generating plan for {c.id}: {e}")
             continue
 
+    return all_actions
+
 
 class ClientMatrixNode(BaseModel):
     id: str
