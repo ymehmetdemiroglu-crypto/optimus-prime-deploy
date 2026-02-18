@@ -1,100 +1,153 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&family=Playfair+Display:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
-/* ===== The Data Sanctuary — Custom Theme ===== */
+/* ===== The Data Sanctuary — Refined Design System ===== */
 
 @theme {
-  /* Color Palette */
-  --color-obsidian: #0A1628;
-  --color-panel: #141824;
-  --color-navy-50: #f0f4ff;
-  --color-navy-100: #e0e9ff;
-  --color-navy-200: #c7d7fe;
-  --color-navy-300: #a5b8fc;
-  --color-navy-400: #8593f8;
-  --color-navy-500: #6366f1;
-  --color-navy-600: #4f46e5;
-  --color-navy-700: #4338ca;
-  --color-navy-800: #3730a3;
-  --color-navy-900: #312e81;
-  --color-navy-950: #0A1628;
-  --color-profit: #10b981;
-  --color-profit-light: #6ee7b7;
-  --color-profit-dark: #047857;
-  --color-electric: #22d3ee;
-  --color-electric-dark: #0891b2;
-  --color-danger: #ef4444;
-  --color-danger-dark: #b91c1c;
-  --color-warning: #f59e0b;
+  /* === Surface Hierarchy ===
+   * Four-layer depth model for rich dark-UI elevation.
+   * obsidian → panel → surface → surface-high
+   */
+  --color-obsidian:     #070C18;   /* Page base — deepest layer */
+  --color-panel:        #0D1424;   /* Sidebar / persistent chrome */
+  --color-surface:      #111927;   /* Cards, inputs, primary containers */
+  --color-surface-high: #18243A;   /* Hover states, active rows, elevated elements */
 
-  /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /* === Navy / Primary Scale
+   * Shifted from violet-indigo toward a more institutional deep royal blue.
+   * Preserves brand identity while adding depth and authority.
+   */
+  --color-navy-50:  #EEF3FF;
+  --color-navy-100: #DDE6FF;
+  --color-navy-200: #BECFFE;
+  --color-navy-300: #93AFFD;
+  --color-navy-400: #6488FB;
+  --color-navy-500: #4168F8;
+  --color-navy-600: #2D52EE;   /* Primary CTA — confident, deep */
+  --color-navy-700: #2241CC;
+  --color-navy-800: #1D35A8;
+  --color-navy-900: #1A2E84;
+  --color-navy-950: #0D1C55;
+
+  /* === Semantic Signal Colors === */
+  --color-profit:       #10B981;   /* Emerald — positive delta, growth */
+  --color-profit-light: #34D399;
+  --color-profit-dark:  #059669;
+
+  --color-electric:     #38BDF8;   /* Sky blue — AI, live data, accents */
+  --color-electric-dark: #0284C7;
+
+  --color-danger:       #F43F5E;   /* Rose — errors, negative metrics */
+  --color-danger-dark:  #BE123C;
+
+  --color-warning:      #F59E0B;   /* Amber — caution, attention */
+  --color-warning-dark: #D97706;
+
+  /* === Typography System === */
+  --font-sans:  'Inter', system-ui, -apple-system, sans-serif;
   --font-serif: 'Playfair Display', Georgia, serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  --font-mono:  'JetBrains Mono', 'Fira Code', Consolas, monospace;
 
-  /* Border Radius */
-  --radius-geometric: 4px;
+  /* === Border Radius — Minimal & Structured
+   * Sharp geometry signals precision. Small radii preserve
+   * the institutional, data-platform character.
+   */
+  --radius-sharp:       2px;
+  --radius-geometric:   4px;
   --radius-institutional: 6px;
-  --radius-lg: 8px;
+  --radius-lg:          10px;
+  --radius-xl:          14px;
 
-  /* Shadows */
-  --shadow-sanctuary: 0 4px 24px rgba(0, 0, 0, 0.12);
-  --shadow-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.15);
-  --shadow-glow-emerald: 0 0 20px rgba(16, 185, 129, 0.15);
+  /* === Shadow System — Calibrated for Dark UI
+   * Dark surfaces require deeper, multi-layered shadows
+   * to communicate elevation convincingly.
+   */
+  --shadow-sanctuary:  0 1px 2px rgba(0,0,0,0.48), 0 4px 16px rgba(0,0,0,0.28);
+  --shadow-elevated:   0 2px 4px rgba(0,0,0,0.52), 0 8px 32px rgba(0,0,0,0.4), 0 24px 64px rgba(0,0,0,0.2);
+  --shadow-glow-cyan:    0 0 0 1px rgba(56,189,248,0.14), 0 0 28px rgba(56,189,248,0.07);
+  --shadow-glow-emerald: 0 0 0 1px rgba(16,185,129,0.14), 0 0 28px rgba(16,185,129,0.07);
+  --shadow-glow-navy:    0 0 0 1px rgba(45,82,238,0.28), 0 0 32px rgba(45,82,238,0.10);
 }
 
-/* ===== Base Styles ===== */
-* {
+/* ===== Global CSS Properties ===== */
+:root {
+  --border:        #1A2540;   /* Primary border — blue-tinted for cohesion */
+  --border-subtle: #121C30;   /* Hairline dividers, ghost separators */
+  --text-primary:  #E2E8F0;   /* Body text — slightly warm, not harsh white */
+  --text-muted:    #8EA3C0;   /* Secondary labels, captions */
+  --text-subtle:   #546070;   /* Placeholder, disabled, metadata */
+}
+
+/* ===== Reset ===== */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* ===== Base Typography ===== */
 body {
   background-color: var(--color-obsidian);
-  color: #f1f5f9;
+  color: var(--text-primary);
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'kern' 1, 'liga' 1;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-serif);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  color: var(--text-primary);
 }
 
-/* ===== Scrollbar ===== */
+/* ===== Scrollbar — Slim & Unobtrusive ===== */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 6px;
+  background: #1E2E48;
+  border-radius: 100px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #28406A;
 }
 
-/* ===== Utility Classes ===== */
+/* ===== Design System Utilities ===== */
+
+/* Card — primary container surface */
 .card-sanctuary {
-  background-color: var(--color-panel);
+  background-color: var(--color-surface);
   border-radius: var(--radius-institutional);
   box-shadow: var(--shadow-sanctuary);
-  border: 1px solid #1e293b;
+  border: 1px solid var(--border);
 }
 
+/* Card — elevated, for modals and drawers */
+.card-elevated {
+  background-color: var(--color-surface-high);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+  border: 1px solid var(--border);
+}
+
+/* AI glow effect — for live/AI-driven components */
 .ai-glow {
   box-shadow: var(--shadow-glow-cyan);
 }
 
+/* Metric color signals */
 .metric-positive {
   color: var(--color-profit);
 }
@@ -103,7 +156,15 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--color-danger);
 }
 
+/* Monospaced data font */
 .font-data {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Subtle divider line */
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
 }
