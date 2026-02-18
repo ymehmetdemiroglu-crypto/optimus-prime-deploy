@@ -10,6 +10,19 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_user
 from app.modules.amazon_ppc.ml.hierarchical_rl import HierarchicalBudgetController
+from app.modules.amazon_ppc.ml.ensemble import ModelEnsemble
+
+# Module-level singleton — avoids loading 4 ML models on every weight-update
+# request. Each worker process gets its own instance (that's fine; they all
+# load/persist weights through the same JSON file on disk).
+_ensemble: ModelEnsemble | None = None
+
+
+def _get_ensemble() -> ModelEnsemble:
+    global _ensemble
+    if _ensemble is None:
+        _ensemble = ModelEnsemble()
+    return _ensemble
 
 # All RL budget endpoints require a valid JWT — they can trigger live budget
 # reallocations across client ad accounts.
@@ -104,8 +117,7 @@ async def update_ensemble_weights(
           ]
         }
     """
-    from app.modules.amazon_ppc.ml.ensemble import ModelEnsemble
-    ensemble = ModelEnsemble()
+    ensemble = _get_ensemble()
     outcome_dicts = [o.model_dump() for o in request.outcomes]
     ensemble.update_weights(outcome_dicts)
     return {

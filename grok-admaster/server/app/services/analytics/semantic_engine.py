@@ -295,9 +295,11 @@ class BleedDetector:
 
         # Relative urgency: use total waste as denominator so that
         # a $5 term in a $20 account is HIGH; the same $5 in a $5000 account is LOW.
+        # Absolute floors prevent all terms in low-spend / single-result sets
+        # from being classified HIGH regardless of actual dollar impact.
         total_waste = sum(float(r.spend) for r in rows)
-        high_cutoff = total_waste * 0.20   # top 20% of waste by value → HIGH
-        medium_cutoff = total_waste * 0.05  # 5–20% → MEDIUM; <5% → LOW
+        high_cutoff = max(total_waste * 0.20, 50.0)   # ≥20% of waste AND ≥$50 → HIGH
+        medium_cutoff = max(total_waste * 0.05, 10.0)  # ≥5% of waste AND ≥$10 → MEDIUM
 
         bleed_items = []
         for row in rows:

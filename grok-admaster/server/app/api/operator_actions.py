@@ -8,6 +8,7 @@ Endpoints:
 - GET  /operator-actions/pending         → List pending recommendations
 - POST /operator-actions/{id}/approve    → Approve a single recommendation
 - POST /operator-actions/{id}/reject     → Reject a single recommendation
+- POST /operator-actions/{id}/execute    → Mark an approved action as executed
 - POST /operator-actions/bulk-approve    → Bulk-approve by account/asin/type
 - GET  /operator-actions/history         → Reviewed actions (audit trail)
 """
@@ -115,6 +116,28 @@ async def reject_action(
     return {"status": "rejected", "id": action_id}
 
 
+@router.post("/{action_id}/execute")
+async def mark_executed(
+    action_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Mark an approved action as executed once the downstream system has applied it.
+
+    This closes the approval lifecycle:
+        pending_review → approved → executed
+
+    Call this from the execution layer (e.g. the Amazon API client) after the
+    negative keyword or bid target has been successfully applied so the audit trail
+    is complete and the action no longer appears as 'approved but not yet run'.
+    """
+    action = await _get_approved(db, action_id)
+    action.status = "executed"
+    await db.commit()
+    return {"status": "executed", "id": action_id}
+
+
 @router.post("/bulk-approve")
 async def bulk_approve_actions(
     body: BulkApproveRequest,
@@ -201,6 +224,26 @@ async def _get_pending(db: AsyncSession, action_id: str) -> ActionReviewQueue:
         raise HTTPException(
             status_code=404,
             detail=f"Pending action {action_id!r} not found (may already be reviewed).",
+        )
+    return action
+
+
+async def _get_approved(db: AsyncSession, action_id: str) -> ActionReviewQueue:
+    try:
+        uid = uuid.UUID(action_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Invalid action ID: {action_id!r}")
+    result = await db.execute(
+        select(ActionReviewQueue).where(
+            ActionReviewQueue.id == uid,
+            ActionReviewQueue.status == "approved",
+        )
+    )
+    action = result.scalar_one_or_none()
+    if not action:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Approved action {action_id!r} not found (may not be approved yet, or already executed).",
         )
     return action
 

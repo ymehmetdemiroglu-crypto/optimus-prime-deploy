@@ -251,6 +251,7 @@ class AutonomousOperator:
                     db.add(queue_entry)
                 else:
                     # No gate: execute immediately (legacy behavior, not recommended).
+                    # log_bleed_action commits internally per item, so no outer commit needed.
                     await detector.log_bleed_action(
                         search_term_embedding_id=bleed["embedding_id"],
                         product_embedding_id=bleed["product_embedding_id"],
@@ -260,9 +261,11 @@ class AutonomousOperator:
                         operator="autonomous",
                     )
 
-        if not self.dry_run:
+        # Flush all queue entries in one shot (approval gate path only).
+        # No-gate path: log_bleed_action already commits per item.
+        if not self.dry_run and self.require_approval:
             await db.commit()
-        
+
         await self._log_action(db, "bleed_detect", asin, {
             "terms_found": len(bleeds),
             "total_waste": total_waste,
@@ -329,6 +332,7 @@ class AutonomousOperator:
                     db.add(queue_entry)
                 else:
                     # No gate: execute immediately (legacy behavior, not recommended).
+                    # log_opportunity commits internally per item, so no outer commit needed.
                     await finder.log_opportunity(
                         term=opp["term"],
                         asin=asin,
@@ -337,9 +341,11 @@ class AutonomousOperator:
                         bid=opp["suggested_bid"],
                     )
 
-        if not self.dry_run:
+        # Flush all queue entries in one shot (approval gate path only).
+        # No-gate path: log_opportunity already commits per item.
+        if not self.dry_run and self.require_approval:
             await db.commit()
-        
+
         await self._log_action(db, "opportunity_find", asin, {
             "terms_found": len(opportunities),
             "total_revenue_potential": total_revenue,
