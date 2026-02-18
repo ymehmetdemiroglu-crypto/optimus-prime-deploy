@@ -148,21 +148,21 @@ async def init_container() -> None:
         engine = container.db_engine()
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        logger.info("✅ Database connection verified via DI container")
+        logger.info("[OK] Database connection verified via DI container")
     except Exception as e:
-        logger.error(f"❌ Database connection failed: {e}")
+        logger.error(f"[ERROR] Database connection failed: {e}")
         raise
 
     # Test Redis connection (optional)
     try:
         redis_client = container.redis_client()
         await redis_client.ping()
-        logger.info("✅ Redis connection verified via DI container")
+        logger.info("[OK] Redis connection verified via DI container")
     except Exception as e:
-        logger.warning(f"⚠️  Redis connection failed: {e}")
+        logger.warning(f"[WARN] Redis connection failed: {e}")
         logger.warning("   Application will continue without Redis caching")
 
-    logger.info("✅ Dependency injection container initialized")
+    logger.info("[OK] Dependency injection container initialized")
 
 
 async def shutdown_container() -> None:
@@ -177,7 +177,7 @@ async def shutdown_container() -> None:
     try:
         engine = container.db_engine()
         await engine.dispose()
-        logger.info("✅ Database connections closed")
+        logger.info("[OK] Database connections closed")
     except Exception as e:
         logger.error(f"Error closing database: {e}")
 
@@ -185,8 +185,8 @@ async def shutdown_container() -> None:
     try:
         redis_client = container.redis_client()
         await redis_client.close()
-        logger.info("✅ Redis connections closed")
+        logger.info("[OK] Redis connections closed")
     except Exception as e:
         logger.warning(f"Error closing Redis: {e}")
 
-    logger.info("✅ Dependency injection container shutdown complete")
+    logger.info("[OK] Dependency injection container shutdown complete")

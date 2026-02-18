@@ -6,8 +6,8 @@ from app.core.database import AsyncSessionLocal
 from app.models.market_intelligence import CompetitorPrice, MarketProduct
 from app.modules.amazon_ppc.models.ppc_data import PPCCampaign, PerformanceRecord
 
-class GrokTools:
-    
+class OptimusTools:
+
     @tool
     async def get_performance_summary(period_days: int = 30) -> str:
         """
@@ -16,7 +16,7 @@ class GrokTools:
         """
         async with AsyncSessionLocal() as session:
             result = await session.execute(text(f"""
-                SELECT 
+                SELECT
                     SUM(spend) as total_spend,
                     SUM(sales) as total_sales,
                     SUM(impressions) as total_impressions,
@@ -27,12 +27,12 @@ class GrokTools:
             row = result.fetchone()
             if not row or not row[0]:
                 return "No performance data available for this period."
-                
+
             spend, sales, imps, clicks = row
             acos = (spend / sales * 100) if sales > 0 else 0
             roas = (sales / spend) if spend > 0 else 0
             ctr = (clicks / imps * 100) if imps > 0 else 0
-            
+
             return f"""
             Performance Summary (Last {period_days} Days):
             - Spend: ${spend:,.2f}
@@ -51,27 +51,27 @@ class GrokTools:
             # Simple query to find tracked competitors
             result = await session.execute(select(MarketProduct).where(MarketProduct.is_competitor == True).limit(limit))
             products = result.scalars().all()
-            
+
             if not products:
                 return "No competitors are currently being tracked."
-            
+
             report = "Tracked Competitors Status:\n"
             for p in products:
                 report += f"- {p.title[:30]}... (ASIN: {p.asin})\n"
-                
+
             return report
 
     @tool
     async def run_sql_query(query: str) -> str:
         """
-        Execute a READ-ONLY SQL query against the database. 
+        Execute a READ-ONLY SQL query against the database.
         Use this to answer complex questions about campaigns, ad groups, or keywords.
         Do not use DROP, DELETE, or INSERT.
         Tables: ppc_campaigns, ppc_ad_groups, ppc_keywords, performance_records.
         """
         if "drop " in query.lower() or "delete " in query.lower() or "insert " in query.lower() or "update " in query.lower():
             return "Error: Only read-only queries are allowed."
-            
+
         async with AsyncSessionLocal() as session:
             try:
                 result = await session.execute(text(query))
@@ -85,7 +85,7 @@ class GrokTools:
     @staticmethod
     def get_all_tools():
         return [
-            GrokTools.get_performance_summary,
-            GrokTools.get_top_moving_competitors,
-            GrokTools.run_sql_query
+            OptimusTools.get_performance_summary,
+            OptimusTools.get_top_moving_competitors,
+            OptimusTools.run_sql_query
         ]

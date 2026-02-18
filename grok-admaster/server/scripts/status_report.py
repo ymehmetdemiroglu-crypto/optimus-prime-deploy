@@ -6,7 +6,7 @@ import json
 async def main():
     try:
         async with httpx.AsyncClient() as client:
-            print("Connecting to Grok AdMaster (Headless Mode)...")
+            print("Connecting to Optimus Prime (Headless Mode)...")
             
             # Fetch Summary
             try:

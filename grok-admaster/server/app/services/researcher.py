@@ -98,7 +98,7 @@ async def amazon_product_details(asin: str):
 
 searchapi_amazon_product = amazon_product_details
 
-research_instructions = """You are an expert researcher for Optimus Pryme, an Amazon Advertising command center.
+research_instructions = """You are an expert researcher for Optimus Prime, an Amazon Advertising command center.
 Your job is to conduct thorough research on market trends, competitor strategies, and advertising best practices.
 
 The core product you are optimizing for is B0DWK3C1R7 (Project Seed).
@@ -121,7 +121,7 @@ def get_research_agent():
         openai_api_base=os.getenv("OPENROUTER_BASE_URL"),
         default_headers={
             "HTTP-Referer": "https://localhost:3000",
-            "X-Title": "Optimus Pryme Researcher",
+            "X-Title": "Optimus Prime Researcher",
         },
         temperature=0
     )

@@ -1,5 +1,5 @@
 """
-Structured logging configuration for Grok-AdMaster.
+Structured logging configuration for Optimus Prime.
 
 Provides:
 - JSON-formatted logs for production

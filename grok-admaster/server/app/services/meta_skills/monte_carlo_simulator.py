@@ -1,5 +1,5 @@
 """
-Monte Carlo Simulator for Optimus Pryme Simulation Lab
+Monte Carlo Simulator for Optimus Prime Simulation Lab
 Performs probabilistic forecasting for campaign performance.
 """
 

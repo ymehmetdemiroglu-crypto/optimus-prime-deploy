@@ -9,7 +9,7 @@ load_dotenv()
 
 router = APIRouter()
 
-from app.agents.grok_tools import GrokTools
+from app.agents.optimus_tools import OptimusTools
 
 # MCP client initialized once per process
 _mcp_client = None
@@ -35,37 +35,29 @@ def _get_mcp_client():
 async def _create_agent_executor_once():
     """Create agent executor once per connection; reuse for all messages in that connection."""
     from langchain_openai import ChatOpenAI
-    from langchain.agents import AgentExecutor, create_openai_tools_agent
-    from langchain import hub
+    from langgraph.prebuilt import create_react_agent
 
     mcp_client = _get_mcp_client()
     mcp_tools = await mcp_client.get_tools()
-    
+
     # Merge remote MCP tools with local RAG tools
-    tools = mcp_tools + GrokTools.get_all_tools()
+    tools = mcp_tools + OptimusTools.get_all_tools()
     llm = ChatOpenAI(
         model="openai/gpt-4o",
         openai_api_key=os.getenv("OPENROUTER_API_KEY"),
         openai_api_base=os.getenv("OPENROUTER_BASE_URL"),
         default_headers={
             "HTTP-Referer": "https://localhost:3000",
-            "X-Title": "Optimus Pryme",
+            "X-Title": "Optimus Prime",
         },
         temperature=0,
     )
-    try:
-        prompt = hub.pull("hwchase17/openai-tools-agent")
-    except Exception:
-        from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a helpful Amazon PPC optimization assistant. Use tools when needed."),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-    agent = create_openai_tools_agent(llm, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools, handle_parsing_errors=True)
-    return executor
+    agent = create_react_agent(
+        llm,
+        tools,
+        prompt="You are Optimus, the AI assistant for Optimus Prime — an Amazon PPC war room dashboard. Clients connect their Amazon Advertising APIs and you help them optimize campaigns, analyze performance, and manage ad spend. Use tools when needed.",
+    )
+    return agent
 
 
 @router.websocket("/ws/{client_id}")
@@ -78,7 +70,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         await manager.send_personal_message(
             json.dumps({
                 "id": "optimus-init-error",
-                "sender": "grok",
+                "sender": "optimus",
                 "content": f"Agent failed to initialize: {str(e)}. Check OPENROUTER_API_KEY and network.",
                 "timestamp": datetime.now().isoformat(),
                 "actions": [],
@@ -92,14 +84,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 response_content = "Agent not available. Please refresh and try again."
             else:
                 try:
-                    result = await executor.ainvoke({"input": data})
-                    response_content = result.get("output", str(result))
+                    result = await executor.ainvoke({"messages": [{"role": "user", "content": data}]})
+                    messages = result.get("messages", [])
+                    response_content = messages[-1].content if messages else str(result)
                 except Exception as e:
                     response_content = f"ERROR: Agent failed to process request. {str(e)}"
 
             response_data = {
                 "id": f"optimus-{datetime.now().timestamp()}",
-                "sender": "grok",
+                "sender": "optimus",
                 "content": response_content,
                 "timestamp": datetime.now().isoformat(),
                 "actions": [],

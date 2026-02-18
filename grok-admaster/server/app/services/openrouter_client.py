@@ -87,8 +87,8 @@ async def call_ai_model(
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://grok-admaster.app",
-                    "X-Title": "Grok AdMaster PPC"
+                    "HTTP-Referer": "https://optimus-prime.app",
+                    "X-Title": "Optimus Prime PPC"
                 },
                 json=payload,
                 timeout=60.0

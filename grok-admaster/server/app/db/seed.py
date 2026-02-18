@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 # Use Unified PPC Model
 from app.modules.amazon_ppc.models.ppc_data import PPCCampaign, AIStrategyType
+from app.modules.auth.models import User, UserRole
+from app.modules.auth.dependencies import hash_password
 
 async def seed_campaigns_if_empty(session: AsyncSession) -> bool:
     """Seed campaigns only if none exist. Returns True if seed ran."""
@@ -97,7 +100,29 @@ async def seed_campaigns_if_empty(session: AsyncSession) -> bool:
     return True
 
 
+async def seed_admin_if_empty(session: AsyncSession) -> bool:
+    """Seed the default admin user only if no users exist."""
+    result = await session.execute(select(User).limit(1))
+    if result.scalar_one_or_none() is not None:
+        return False
+
+    admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123!@#")
+    admin = User(
+        email="admin@optimusprime.app",
+        hashed_password=hash_password(admin_password),
+        full_name="Admin",
+        role=UserRole.ADMIN,
+    )
+    session.add(admin)
+    await session.commit()
+    return True
+
+
 async def run_seed():
     """Entry point: open session, seed if empty, close."""
     async with AsyncSessionLocal() as session:
-        return await seed_campaigns_if_empty(session)
+        admin_seeded = await seed_admin_if_empty(session)
+        if admin_seeded:
+            print("Default admin user seeded (admin@optimusprime.app)")
+        campaigns_seeded = await seed_campaigns_if_empty(session)
+        return admin_seeded or campaigns_seeded

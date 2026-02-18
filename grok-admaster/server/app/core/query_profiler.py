@@ -112,7 +112,7 @@ class QueryStats:
         for query, count in self.duplicate_queries.items():
             if count > 10:  # Threshold for N+1 detection
                 logger.warning(
-                    f"⚠️  Potential N+1 query detected! "
+                    f"[WARN] Potential N+1 query detected! "
                     f"Query executed {count} times: {query[:100]}..."
                 )
                 self.n_plus_1_detected = True
@@ -240,13 +240,13 @@ class QueryProfiler:
 
         if summary['slow_queries_count'] > 0:
             logger.warning(
-                f"⚠️  {summary['slow_queries_count']} slow queries detected "
+                f"[WARN] {summary['slow_queries_count']} slow queries detected "
                 f"(>{self.slow_threshold_ms}ms)"
             )
 
         if summary['n_plus_1_detected']:
             logger.error(
-                "❌ N+1 query problem detected! "
+                "[ERROR] N+1 query problem detected! "
                 "Consider using eager loading (selectinload/joinedload)"
             )
 

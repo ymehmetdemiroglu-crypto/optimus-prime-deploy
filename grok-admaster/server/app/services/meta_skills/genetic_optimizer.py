@@ -1,5 +1,5 @@
 """
-Genetic Optimizer for Optimus Pryme Evolution Engine
+Genetic Optimizer for Optimus Prime Evolution Engine
 Implements genetic algorithms for strategy optimization.
 """
 

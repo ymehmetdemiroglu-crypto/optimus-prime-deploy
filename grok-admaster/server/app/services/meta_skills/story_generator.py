@@ -1,5 +1,5 @@
 """
-Story Generator for Optimus Pryme Narrative Architect
+Story Generator for Optimus Prime Narrative Architect
 Converts data and insights into compelling human-readable narratives.
 """
 

@@ -1,5 +1,5 @@
 """
-Trend Detector for Optimus Pryme Knowledge Synthesizer
+Trend Detector for Optimus Prime Knowledge Synthesizer
 Identifies market trends, emerging opportunities, and anomalies.
 """
 

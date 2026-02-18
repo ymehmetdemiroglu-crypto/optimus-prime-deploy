@@ -8,7 +8,21 @@
       "Bash(python:*)",
       "Bash(openssl rand:*)",
       "Bash(chmod:*)",
-      "Bash(alembic current:*)"
+      "Bash(alembic current:*)",
+      "Bash(npm install)",
+      "Bash(npm install react-router-dom axios @tanstack/react-query recharts lucide-react zustand date-fns clsx tailwind-merge zod react-hook-form @hookform/resolvers)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(npm run dev)",
+      "Bash(start http://localhost:5173)",
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(curl:*)",
+      "Bash(venv/Scripts/pip.exe install:*)",
+      "Bash(echo:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(./venv/Scripts/python:*)"
     ]
   }
 }

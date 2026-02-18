@@ -62,10 +62,10 @@ class CacheClient:
             )
             await self._client.ping()
             self._enabled = True
-            logger.info("✅ Redis cache client connected")
+            logger.info("[OK] Redis cache client connected")
 
         except Exception as e:
-            logger.warning(f"⚠️  Redis not available: {e}")
+            logger.warning(f"[WARN] Redis not available: {e}")
             logger.warning("   Caching disabled (will compute all values)")
             self._enabled = False
             self._client = None
@@ -215,7 +215,7 @@ class CacheClient:
 
         try:
             await self._client.flushdb()
-            logger.warning("⚠️  Cleared entire cache database")
+            logger.warning("[WARN] Cleared entire cache database")
 
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")

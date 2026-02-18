@@ -1,11 +1,11 @@
 """
-AI Simulator Service - Generates realistic Grok responses.
+AI Simulator Service - Generates realistic Optimus responses.
 """
 import random
 from typing import Optional
 
 
-def generate_grok_response(message: str, context_asin: Optional[str] = None) -> str:
+def generate_optimus_response(message: str, context_asin: Optional[str] = None) -> str:
     """
     Generate a context-aware simulated response based on user message.
     Uses template matching and heuristics for realistic responses.
@@ -175,7 +175,7 @@ Overall: **You're on track for your best month yet!** 🚀"""
 
 
 def _get_optimization_response() -> str:
-    return """**Grok Optimization Suite** ⚡
+    return """**Optimus Optimization Suite** ⚡
 
 I can help optimize in several ways. What's your priority?
 
@@ -214,7 +214,7 @@ def _get_default_response() -> str:
 
 What would you like to explore? Or just tell me about a challenge you're facing!""",
         
-        """**Grok at your service!** 🤖
+        """**Optimus at your service!** 🤖
 
 I'm continuously monitoring your campaigns. Here's what I'm seeing right now:
 

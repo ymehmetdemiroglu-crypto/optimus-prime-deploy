@@ -12,7 +12,7 @@ from app.core.config import settings
 
 async def run_health_check():
     print("="*60)
-    print("OPTIMUS PRYME SYSTEM HEALTH CHECK")
+    print("OPTIMUS PRIME SYSTEM HEALTH CHECK")
     print("="*60)
     
     # 1. Database Connection

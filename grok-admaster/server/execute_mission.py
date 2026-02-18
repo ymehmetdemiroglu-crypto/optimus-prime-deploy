@@ -38,7 +38,7 @@ async def execute_mission(query: str):
             openai_api_base=os.getenv("OPENROUTER_BASE_URL"),
             default_headers={
                 "HTTP-Referer": "https://localhost:3000",
-                "X-Title": "Optimus Pryme Mission Control",
+                "X-Title": "Optimus Prime Mission Control",
             },
             temperature=0
         )

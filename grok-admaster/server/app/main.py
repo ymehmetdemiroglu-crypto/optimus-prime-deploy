@@ -1,5 +1,5 @@
 """
-Grok AdMaster API - Main Entry Point
+Optimus Prime API - Main Entry Point
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +11,7 @@ setup_logging(env=settings.ENV, level="DEBUG" if settings.ENV == "development" e
 
 from app.api import dashboard, anomalies, creative, settings as settings_api, audit, discovery, performance, lockdown, validation
 from app.api.dsp import dsp_api
+from app.modules.auth.router import router as auth_router
 from app.modules.amazon_ppc.accounts import router as accounts_router
 from app.modules.amazon_ppc.ingestion import router as ingestion_router
 from app.modules.amazon_ppc.entrypoints import campaigns
@@ -29,6 +30,7 @@ import sqlalchemy as sa
 async def lifespan(app: FastAPI):
     from app.core.database import engine, Base
     # Import all models to ensure they're registered
+    from app.modules.auth.models import User  # noqa: F811
     from app.modules.amazon_ppc.accounts.models import Account, Profile, Credential
     from app.modules.amazon_ppc.models.ppc_data import PPCCampaign, PPCKeyword, PerformanceRecord
     from app.modules.amazon_ppc.features.store import FeatureSnapshot
@@ -77,7 +79,7 @@ async def lifespan(app: FastAPI):
 
         # Register all feature definitions
         register_all_features(feature_store)
-        logger.info("✅ Feature store initialized with all feature groups")
+        logger.info("[OK] Feature store initialized with all feature groups")
     except Exception as e:
         logger.warning(f"Feature store initialization warning: {e}")
 
@@ -164,10 +166,10 @@ async def lifespan(app: FastAPI):
     # Dispose database engine
     await engine.dispose()
 
-    logger.info("✅ Application shutdown complete")
+    logger.info("[OK] Application shutdown complete")
 
 app = FastAPI(
-    title="Optimus Pryme API",
+    title="Optimus Prime API",
     description="AI-powered War Room for Amazon Sellers",
     version="1.0.0",
     lifespan=lifespan
@@ -207,6 +209,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 from app.websockets import chat as chat_ws
 
 # Include API Routers
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(campaigns.router, prefix="/api/v1/campaigns", tags=["Campaigns"])
 app.include_router(anomalies.router, prefix="/api/v1", tags=["Anomalies"])  # GPT-4 powered
@@ -247,7 +250,7 @@ app.include_router(semantic_router, prefix="/api/v1/semantic", tags=["Semantic I
 @app.get("/")
 async def root():
     return {
-        "message": "Grok AdMaster API",
+        "message": "Optimus Prime API",
         "status": "operational",
         "docs": "/docs"
     }

@@ -178,7 +178,7 @@ async def get_ppc_recommendations(asin: str = None, title: str = None, strategic
 @mcp.tool()
 def create_ppc_campaign(name: str, daily_budget: float, strategy: str, keywords: List[Dict]) -> Dict:
     """
-    Provision a new PPC campaign in the Optimus AdMaster system.
+    Provision a new PPC campaign in the Optimus Prime system.
     Args:
         name: Name of the campaign.
         daily_budget: Daily budget in USD.

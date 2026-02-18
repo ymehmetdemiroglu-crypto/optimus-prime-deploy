@@ -34,8 +34,8 @@ class OpenRouterClient:
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": "https://grok-admaster.com", # Required by OpenRouter
-            "X-Title": "Grok AdMaster",
+            "HTTP-Referer": "https://optimus-prime.app", # Required by OpenRouter
+            "X-Title": "Optimus Prime",
             "Content-Type": "application/json"
         }
 

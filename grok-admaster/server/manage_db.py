@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Database management script for Grok-AdMaster.
+Database management script for Optimus Prime.
 
 Provides commands for:
 - Running migrations

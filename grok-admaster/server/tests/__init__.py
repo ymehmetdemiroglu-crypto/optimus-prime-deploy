@@ -1,1 +1,1 @@
-# Tests for Grok AdMaster server
+# Tests for Optimus Prime server

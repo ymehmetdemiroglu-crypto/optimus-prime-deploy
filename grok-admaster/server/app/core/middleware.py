@@ -1,5 +1,5 @@
 """
-Custom middleware for Grok-AdMaster API.
+Custom middleware for Optimus Prime API.
 
 Provides:
 - Correlation ID injection for request tracing

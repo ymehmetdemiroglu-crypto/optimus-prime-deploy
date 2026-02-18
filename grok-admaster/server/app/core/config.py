@@ -26,7 +26,7 @@ def _parse_cors_origins(v: str) -> list[str]:
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Optimus Pryme"
+    PROJECT_NAME: str = "Optimus Prime"
     API_V1_STR: str = "/api/v1"
     ENV: str = "development"
 

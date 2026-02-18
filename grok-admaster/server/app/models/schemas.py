@@ -1,5 +1,5 @@
 """
-Pydantic models for Grok AdMaster API.
+Pydantic models for Optimus Prime API.
 """
 from pydantic import BaseModel
 from typing import List, Optional
@@ -69,7 +69,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     id: str
-    sender: str = "grok"
+    sender: str = "optimus"
     content: str
     timestamp: datetime
     action_suggestion: Optional[dict] = None

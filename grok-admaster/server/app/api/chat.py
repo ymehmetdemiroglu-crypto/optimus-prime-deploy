@@ -8,23 +8,23 @@ import uuid
 import random
 
 from app.models.schemas import ChatRequest, ChatResponse
-from app.services.ai_simulator import generate_grok_response
+from app.services.ai_simulator import generate_optimus_response
 
 router = APIRouter()
 
 
 @router.post("/message", response_model=ChatResponse)
 async def send_message(request: ChatRequest):
-    """Send a message to Grok AI and receive a simulated response."""
+    """Send a message to Optimus AI and receive a simulated response."""
     # Simulate AI "thinking" time (1-2 seconds)
     await asyncio.sleep(random.uniform(1.0, 2.0))
     
     # Generate AI response
-    response_content = generate_grok_response(request.message, request.context_asin)
+    response_content = generate_optimus_response(request.message, request.context_asin)
     
     return ChatResponse(
         id=f"msg_{uuid.uuid4().hex[:8]}",
-        sender="grok",
+        sender="optimus",
         content=response_content,
         timestamp=datetime.now()
     )

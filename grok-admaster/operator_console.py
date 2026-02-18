@@ -45,7 +45,7 @@ async def get_dashboard_summary(client):
         print(f"{Colors.WARNING}Could not fetch dashboard summary: {str(e)}{Colors.ENDC}")
 
 async def run_console():
-    print(f"{Colors.CYAN}Initializing Grok AdMaster Operator Console...{Colors.ENDC}")
+    print(f"{Colors.CYAN}Initializing Optimus Prime Operator Console...{Colors.ENDC}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         if await check_health(client):
             await get_dashboard_summary(client)

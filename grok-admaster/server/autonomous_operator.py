@@ -69,7 +69,7 @@ class AutonomousOperator:
         self.ai_client = OpenRouterClient()
         
         logger.info("=" * 60)
-        logger.info("  OPTIMUS PRYME — AUTONOMOUS OPERATOR INITIALIZED")
+        logger.info("  OPTIMUS PRIME — AUTONOMOUS OPERATOR INITIALIZED")
         logger.info(f"  Mode: {'DRY RUN (Simulation)' if dry_run else 'LIVE (Actions will execute)'}")
         logger.info(f"  Patrol Interval: {patrol_interval_hours} hours")
         logger.info(f"  Bleed Threshold: {bleed_threshold}")
@@ -356,7 +356,7 @@ class AutonomousOperator:
 # ===================================================
 
 async def main():
-    parser = argparse.ArgumentParser(description="Optimus Pryme Autonomous Operator")
+    parser = argparse.ArgumentParser(description="Optimus Prime Autonomous Operator")
     parser.add_argument("--once", action="store_true", help="Run one patrol cycle and exit")
     parser.add_argument("--dry-run", action="store_true", help="Simulate without executing actions")
     parser.add_argument("--interval", type=float, default=6.0, help="Hours between patrols (default: 6)")

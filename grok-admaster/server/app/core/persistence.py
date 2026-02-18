@@ -20,9 +20,9 @@ class PersistentSchedulerState:
             # Test connection with ping
             self.redis_client.ping()
             self.enabled = True
-            print("✅ Redis connected successfully for scheduler persistence")
+            print("[OK] Redis connected successfully for scheduler persistence")
         except Exception as e:
-            print(f"⚠️  Redis not available: {e}")
+            print(f"[WARN] Redis not available: {e}")
             print("   Scheduler will run without persistence (dev mode)")
             self.redis_client = None
             self.enabled = False

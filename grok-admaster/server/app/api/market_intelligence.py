@@ -10,7 +10,14 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.services.market_intelligence_ingester import market_ingester
-from app.services.researcher import amazon_search
+
+try:
+    from app.services.researcher import amazon_search
+except ImportError as e:
+    # If deepagents or other dependencies are missing/broken, mock the function
+    print(f"WARNING: app.services.researcher could not be imported: {e}. Search functionality disabled.")
+    async def amazon_search(query: str, location_code: int = 2840, persist: bool = True):
+        return f"Error: Search service unavailable. Dependency missing: {str(e)}"
 
 router = APIRouter()
 

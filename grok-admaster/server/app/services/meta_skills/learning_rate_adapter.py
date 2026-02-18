@@ -1,5 +1,5 @@
 """
-Learning Rate Adapter for Optimus Pryme Meta-Learner
+Learning Rate Adapter for Optimus Prime Meta-Learner
 Adjusts exploration vs exploitation based on market conditions.
 """
 

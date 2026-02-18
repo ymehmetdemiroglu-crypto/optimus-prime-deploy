@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+/* ===== The Data Sanctuary — Custom Theme ===== */
+
+@theme {
+  /* Color Palette */
+  --color-obsidian: #0A1628;
+  --color-panel: #141824;
+  --color-navy-50: #f0f4ff;
+  --color-navy-100: #e0e9ff;
+  --color-navy-200: #c7d7fe;
+  --color-navy-300: #a5b8fc;
+  --color-navy-400: #8593f8;
+  --color-navy-500: #6366f1;
+  --color-navy-600: #4f46e5;
+  --color-navy-700: #4338ca;
+  --color-navy-800: #3730a3;
+  --color-navy-900: #312e81;
+  --color-navy-950: #0A1628;
+  --color-profit: #10b981;
+  --color-profit-light: #6ee7b7;
+  --color-profit-dark: #047857;
+  --color-electric: #22d3ee;
+  --color-electric-dark: #0891b2;
+  --color-danger: #ef4444;
+  --color-danger-dark: #b91c1c;
+  --color-warning: #f59e0b;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  /* Border Radius */
+  --radius-geometric: 4px;
+  --radius-institutional: 6px;
+  --radius-lg: 8px;
+
+  /* Shadows */
+  --shadow-sanctuary: 0 4px 24px rgba(0, 0, 0, 0.12);
+  --shadow-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.15);
+  --shadow-glow-emerald: 0 0 20px rgba(16, 185, 129, 0.15);
+}
+
+/* ===== Base Styles ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-obsidian);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ===== Utility Classes ===== */
+.card-sanctuary {
+  background-color: var(--color-panel);
+  border-radius: var(--radius-institutional);
+  box-shadow: var(--shadow-sanctuary);
+  border: 1px solid #1e293b;
+}
+
+.ai-glow {
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.metric-positive {
+  color: var(--color-profit);
+}
+
+.metric-negative {
+  color: var(--color-danger);
+}
+
+.font-data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
