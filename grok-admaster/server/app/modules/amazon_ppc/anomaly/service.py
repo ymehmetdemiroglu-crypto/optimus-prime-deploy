@@ -574,6 +574,51 @@ class AnomalyDetectionService:
         )
         avg_resolution = await db.scalar(avg_resolution_query)
         
+        # Most common entity type
+        entity_type_query = select(
+            AnomalyAlert.entity_type,
+            func.count().label("count")
+        ).where(
+            AnomalyAlert.profile_id == profile_id
+        ).group_by(AnomalyAlert.entity_type).order_by(desc("count")).limit(1)
+        entity_type_result = await db.execute(entity_type_query)
+        entity_type_row = entity_type_result.first()
+        most_common_entity_type = entity_type_row[0] if entity_type_row else "keyword"
+
+        # Most common root cause (root_causes is a JSON list of strings per alert)
+        root_cause_query = select(AnomalyAlert.root_causes).where(
+            and_(
+                AnomalyAlert.profile_id == profile_id,
+                AnomalyAlert.root_causes.isnot(None),
+            )
+        )
+        root_cause_result = await db.execute(root_cause_query)
+        all_root_causes = root_cause_result.scalars().all()
+        cause_counts: Dict[str, int] = {}
+        for causes in all_root_causes:
+            if causes:
+                for cause in causes:
+                    cause_counts[cause] = cause_counts.get(cause, 0) + 1
+        most_common_root_cause = max(cause_counts, key=cause_counts.get) if cause_counts else None
+
+        # Detection rates
+        now = datetime.utcnow()
+        rate_24h_query = select(func.count()).select_from(AnomalyAlert).where(
+            and_(
+                AnomalyAlert.profile_id == profile_id,
+                AnomalyAlert.detection_timestamp >= now - timedelta(hours=24),
+            )
+        )
+        detection_rate_last_24h = await db.scalar(rate_24h_query) or 0
+
+        rate_7d_query = select(func.count()).select_from(AnomalyAlert).where(
+            and_(
+                AnomalyAlert.profile_id == profile_id,
+                AnomalyAlert.detection_timestamp >= now - timedelta(days=7),
+            )
+        )
+        detection_rate_last_7d = await db.scalar(rate_7d_query) or 0
+
         return AnomalyStatistics(
             total_alerts=total or 0,
             unresolved_count=unresolved or 0,
@@ -582,10 +627,10 @@ class AnomalyDetectionService:
             medium_count=severity_counts.get("medium", 0),
             low_count=severity_counts.get("low", 0),
             avg_resolution_time_minutes=float(avg_resolution) if avg_resolution else None,
-            most_common_entity_type="keyword",  # TODO: Calculate from data
-            most_common_root_cause=None,  # TODO: Calculate from data
-            detection_rate_last_24h=0,  # TODO: Calculate
-            detection_rate_last_7d=0,  # TODO: Calculate
+            most_common_entity_type=most_common_entity_type,
+            most_common_root_cause=most_common_root_cause,
+            detection_rate_last_24h=detection_rate_last_24h,
+            detection_rate_last_7d=detection_rate_last_7d,
         )
 
 
