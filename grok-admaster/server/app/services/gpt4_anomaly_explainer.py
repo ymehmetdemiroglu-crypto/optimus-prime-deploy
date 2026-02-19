@@ -4,13 +4,13 @@ GPT-4 Anomaly Explanation Service
 Uses GPT-4 via OpenRouter to explain the 'why' behind detected anomalies
 and provide actionable recommendations.
 """
-import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from app.services.openrouter_client import call_ai_model, ModelRole
+from app.core.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def explain_anomaly(

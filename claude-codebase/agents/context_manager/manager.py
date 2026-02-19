@@ -19,6 +19,9 @@ from collections import deque
 from ..base_agent import BaseAgent
 from ..models.message import Message, MessageRole
 from ..models.context import Context
+from utils.token_counter import TokenCounter
+
+_token_counter = TokenCounter()
 
 
 class ContextManager(BaseAgent):
@@ -314,15 +317,8 @@ class ContextManager(BaseAgent):
         return max(0.0, min(1.0, score))
     
     def _estimate_tokens(self, text: str) -> int:
-        """
-        Estimate token count.
-        
-        For production, use actual tokenizer (e.g., anthropic.count_tokens)
-        """
-        if not text:
-            return 0
-        # Rough approximation: 4 chars per token
-        return len(text) // 4
+        """Estimate token count using the shared TokenCounter utility."""
+        return _token_counter.count(text)
     
     def reset(self) -> None:
         """Clear all context."""

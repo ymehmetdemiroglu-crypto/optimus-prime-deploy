@@ -3,7 +3,7 @@ Database models for anomaly detection.
 """
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, JSON, ForeignKey, Text, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import Base
 from ..accounts.models import Profile
 
@@ -39,7 +39,7 @@ class AnomalyAlert(Base):
     
     # Detection metadata
     detector_type = Column(String(50), nullable=False)  # lstm, streaming, isolation_forest, ensemble
-    detection_timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    detection_timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Explanations and root cause
     explanation = Column(JSON)  # {feature_name: contribution}

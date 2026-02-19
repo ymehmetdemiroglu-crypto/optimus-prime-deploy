@@ -46,7 +46,7 @@ async def get_active_alerts(
     Get active (unresolved) anomaly alerts.
     """
     alerts = await anomaly_service.get_active_alerts(db, profile_id, severity, limit)
-    return [AnomalyAlertRead.from_orm(a) for a in alerts]
+    return [AnomalyAlertRead.model_validate(a) for a in alerts]
 
 
 @router.patch("/alerts/{alert_id}/acknowledge", response_model=AnomalyAlertRead)
@@ -61,7 +61,7 @@ async def acknowledge_alert(
     alert = await anomaly_service.acknowledge_alert(db, alert_id, acknowledged_by)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    return AnomalyAlertRead.from_orm(alert)
+    return AnomalyAlertRead.model_validate(alert)
 
 
 @router.patch("/alerts/{alert_id}/resolve", response_model=AnomalyAlertRead)
@@ -80,7 +80,7 @@ async def resolve_alert(
     )
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    return AnomalyAlertRead.from_orm(alert)
+    return AnomalyAlertRead.model_validate(alert)
 
 
 @router.get("/statistics", response_model=AnomalyStatistics)

@@ -5,7 +5,7 @@ import logging
 import asyncio
 import time
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, desc, update
 from sqlalchemy.orm import selectinload
@@ -304,7 +304,7 @@ class AnomalyDetectionService:
         days: int = 14,
     ) -> Optional[np.ndarray]:
         """Fetch historical time-series data for LSTM detector."""
-        since_date = datetime.utcnow() - timedelta(days=days)
+        since_date = datetime.now(timezone.utc) - timedelta(days=days)
         
         # Query performance records using FK-based filters
         if entity_type == EntityType.KEYWORD:
@@ -382,7 +382,7 @@ class AnomalyDetectionService:
         hours: int = 1,
     ) -> List[Tuple[str, str]]:
         """Fetch recent anomalies for root cause analysis."""
-        since_time = datetime.utcnow() - timedelta(hours=hours)
+        since_time = datetime.now(timezone.utc) - timedelta(hours=hours)
         
         query = select(AnomalyAlert).where(
             and_(
@@ -495,7 +495,7 @@ class AnomalyDetectionService:
         
         if alert:
             alert.is_acknowledged = True
-            alert.acknowledged_at = datetime.utcnow()
+            alert.acknowledged_at = datetime.now(timezone.utc)
             alert.acknowledged_by = acknowledged_by
             await db.commit()
             await db.refresh(alert)
@@ -515,7 +515,7 @@ class AnomalyDetectionService:
         
         if alert:
             alert.is_resolved = True
-            alert.resolved_at = datetime.utcnow()
+            alert.resolved_at = datetime.now(timezone.utc)
             alert.resolution_notes = resolution_notes
             
             # Update history with resolution info
@@ -611,7 +611,7 @@ class AnomalyDetectionService:
         most_common_root_cause = max(cause_counts, key=cause_counts.get) if cause_counts else None
 
         # Detection rates
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         rate_24h_query = select(func.count()).select_from(AnomalyAlert).where(
             and_(
                 AnomalyAlert.profile_id == profile_id,

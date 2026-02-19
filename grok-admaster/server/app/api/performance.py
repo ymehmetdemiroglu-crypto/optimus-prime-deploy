@@ -13,7 +13,7 @@ class MetricTrend(BaseModel):
     trend_percent: float
     trend_direction: str # up, down, flat
 
-class PerformanceMetric(BaseModel):
+class KPIMetric(BaseModel):
     label: str
     value: str
     trend: MetricTrend
@@ -37,7 +37,7 @@ class ProductPerformance(BaseModel):
 class DashboardData(BaseModel):
     client_name: str
     last_updated: str
-    kpis: List[PerformanceMetric]
+    kpis: List[KPIMetric]
     chart_data: List[ChartDataPoint]
     budget_pacing: dict
     top_products: List[ProductPerformance]
@@ -49,27 +49,27 @@ MOCK_DASHBOARD = DashboardData(
     client_name="Aura Cosmetics",
     last_updated=datetime.now().strftime("%Y-%m-%d %H:%M"),
     kpis=[
-        PerformanceMetric(
+        KPIMetric(
             label="Total Sales",
             value="$14,250",
             trend=MetricTrend(value=12, trend_percent=12, trend_direction="up"),
             color="primary"
         ),
-        PerformanceMetric(
+        KPIMetric(
             label="ACoS",
             value="24.5%",
             trend=MetricTrend(value=-2, trend_percent=2, trend_direction="down"),
             sub_label="Target: 25.0%",
             color="accent-cyan"
         ),
-        PerformanceMetric(
+        KPIMetric(
             label="Ad Spend",
             value="$3,400",
             trend=MetricTrend(value=5, trend_percent=5, trend_direction="up"),
             sub_label="Daily Avg: $485",
             color="accent-pink"
         ),
-        PerformanceMetric(
+        KPIMetric(
             label="ROAS",
             value="4.2x",
             trend=MetricTrend(value=1.5, trend_percent=1.5, trend_direction="up"),

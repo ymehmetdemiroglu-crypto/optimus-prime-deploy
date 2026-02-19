@@ -6,11 +6,11 @@ Supported Roles: Strategist (GPT-4), Creative (Claude Sonnet), Analyst (Claude H
 """
 import os
 import httpx
-import logging
 from typing import Optional, Dict, Any, List, Union
 from enum import Enum
+from app.core.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 from app.core.config import settings
 

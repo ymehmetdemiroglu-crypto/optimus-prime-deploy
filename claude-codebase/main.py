@@ -84,13 +84,13 @@ class ClaudeAssistant:
         
         response_config = {
             'model': self.config.default_model,
-            'default_max_tokens': 4096,
+            'default_max_tokens': 8000,
             'streaming_enabled': True
         }
         self.response_generator = ResponseGenerator(response_config, self.logger)
-        
+
         optimizer_config = {
-            'total_budget': 200000,
+            'total_budget': 60000,
             'operation_budgets': self.config.operation_budgets,
             'alert_threshold': 0.8
         }

@@ -68,7 +68,7 @@ class ResponseGenerator(BaseAgent):
         
         # Configuration
         self.model = config.get('model', 'claude-3-sonnet-20240229')
-        self.default_max_tokens = config.get('default_max_tokens', 4096)
+        self.default_max_tokens = config.get('default_max_tokens', 8000)
         self.default_temperature = config.get('default_temperature', 0.7)
         self.streaming_enabled = config.get('streaming_enabled', True)
         

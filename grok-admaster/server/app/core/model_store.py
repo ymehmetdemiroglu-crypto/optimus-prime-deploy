@@ -5,10 +5,10 @@ Abstracts where ML models are saved and loaded.
 import abc
 import os
 import pickle
-import logging
 from typing import Any
 from datetime import datetime
-logger = logging.getLogger(__name__)
+from app.core.logging_config import get_logger
+logger = get_logger(__name__)
 
 class ModelStore(abc.ABC):
     @abc.abstractmethod

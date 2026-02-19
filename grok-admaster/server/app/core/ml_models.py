@@ -1,7 +1,7 @@
 
 from typing import Optional
-import logging
 from functools import lru_cache
+from app.core.logging_config import get_logger
 
 # Import ML models
 # Note: These imports might be slow if they load heavy libraries, but that is acceptable at startup
@@ -11,7 +11,7 @@ from app.modules.amazon_ppc.ml.deep_optimizer import DeepBidOptimizer
 from app.modules.amazon_ppc.ml.bandits import BidBanditOptimizer
 from app.modules.amazon_ppc.ml.ensemble import ModelEnsemble
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ModelCache:
     """

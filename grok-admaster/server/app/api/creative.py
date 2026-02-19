@@ -6,11 +6,10 @@ Exposes Claude-powered ad copy generation to the frontend.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-import logging
-
+from app.core.logging_config import get_logger
 from app.services.ad_copy_generator import generate_ad_headlines, improve_product_description
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter(prefix="/creative", tags=["Creative AI"])
 
 

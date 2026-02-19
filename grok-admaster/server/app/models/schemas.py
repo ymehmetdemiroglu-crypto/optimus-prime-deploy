@@ -10,8 +10,8 @@ from enum import Enum
 class AIStrategy(str, Enum):
     MANUAL = "manual"
     AUTO_PILOT = "auto_pilot"
-    AGGRESSIVE = "aggressive_growth"
-    PROFIT = "profit_guard"
+    AGGRESSIVE_GROWTH = "aggressive_growth"
+    PROFIT_GUARD = "profit_guard"
     ADVANCED = "advanced"
     AUTONOMOUS = "autonomous"
 
@@ -76,7 +76,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     id: str
-    sender: str = "optimus"
+    sender: str = "grok"
     content: str
     timestamp: datetime
     action_suggestion: Optional[dict] = None
