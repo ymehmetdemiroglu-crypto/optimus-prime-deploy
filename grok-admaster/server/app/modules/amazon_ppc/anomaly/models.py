@@ -47,11 +47,11 @@ class AnomalyAlert(Base):
     
     # Alert management
     is_acknowledged = Column(Boolean, default=False, index=True)
-    acknowledged_at = Column(DateTime)
+    acknowledged_at = Column(DateTime(timezone=True))
     acknowledged_by = Column(String(200))
-    
+
     is_resolved = Column(Boolean, default=False, index=True)
-    resolved_at = Column(DateTime)
+    resolved_at = Column(DateTime(timezone=True))
     resolution_notes = Column(Text)
     
     # Relationships
@@ -96,7 +96,7 @@ class AnomalyHistory(Base):
     
     # Detection metadata
     detector_type = Column(String(50), nullable=False)
-    detection_timestamp = Column(DateTime, nullable=False, index=True)
+    detection_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
     
     # Context at time of detection
     explanation = Column(JSON)
@@ -144,7 +144,7 @@ class AnomalyTrainingData(Base):
     # Labels
     is_true_anomaly = Column(Boolean, nullable=False)  # Human-verified
     labeled_by = Column(String(200))
-    labeled_at = Column(DateTime, default=datetime.utcnow)
+    labeled_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     
     # Model performance tracking
     predicted_score = Column(Float)

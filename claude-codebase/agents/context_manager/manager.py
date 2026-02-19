@@ -17,8 +17,8 @@ Token Optimization:
 from typing import List, Dict, Any, Optional
 from collections import deque
 from ..base_agent import BaseAgent
-from ..models.message import Message, MessageRole
-from ..models.context import Context
+from models.message import Message, MessageRole
+from models.context import Context
 from utils.token_counter import TokenCounter
 
 _token_counter = TokenCounter()

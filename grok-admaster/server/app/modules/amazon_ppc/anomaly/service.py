@@ -1,7 +1,6 @@
 """
 Anomaly Detection Service - Integrates advanced anomaly detection into PPC workflow.
 """
-import logging
 import asyncio
 import time
 from typing import List, Dict, Any, Optional, Tuple
@@ -10,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, desc, update
 from sqlalchemy.orm import selectinload
 import numpy as np
+
+from app.core.logging_config import get_logger
 
 from ..ml.advanced_anomaly import (
     TimeSeriesAnomalyDetector,
@@ -31,7 +32,7 @@ from .schemas import (
     SeverityLevel,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AnomalyDetectionService:
@@ -161,7 +162,7 @@ class AnomalyDetectionService:
             high_count=severity_counts["high"],
             medium_count=severity_counts["medium"],
             low_count=severity_counts["low"],
-            alerts=[AnomalyAlertRead.from_orm(a) for a in alerts],
+            alerts=[AnomalyAlertRead.model_validate(a) for a in alerts],
             execution_time_ms=execution_time_ms,
         )
     
