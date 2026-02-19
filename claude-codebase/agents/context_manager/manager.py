@@ -15,55 +15,10 @@ Token Optimization:
 """
 
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field
-from datetime import datetime
 from collections import deque
 from ..base_agent import BaseAgent
-
-
-@dataclass
-class Message:
-    """
-    Represents a single message in the conversation.
-    
-    Attributes:
-        role: Speaker role ('user' or 'assistant')
-        content: Message content
-        timestamp: When message was created
-        tokens: Estimated token count
-        importance_score: Score indicating importance (0.0 to 1.0)
-        metadata: Additional metadata
-    """
-    role: str
-    content: str
-    timestamp: datetime = field(default_factory=datetime.now)
-    tokens: int = 0
-    importance_score: float = 0.5
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Context:
-    """
-    Complete conversation context with optimization metadata.
-    
-    Attributes:
-        messages: List of all messages (some may be summarized)
-        total_tokens: Total tokens in current context
-        original_tokens: Tokens before compression
-        summary: High-level summary of conversation so far
-    """
-    messages: List[Message]
-    total_tokens: int
-    original_tokens: int
-    summary: Optional[str] = None
-    
-    @property
-    def compression_ratio(self) -> float:
-        """Calculate how much context has been compressed."""
-        if self.original_tokens == 0:
-            return 0.0
-        return 1.0 - (self.total_tokens / self.original_tokens)
+from ..models.message import Message, MessageRole
+from ..models.context import Context
 
 
 class ContextManager(BaseAgent):
@@ -146,12 +101,11 @@ class ContextManager(BaseAgent):
         if importance_score is None:
             importance_score = self._calculate_importance(content, role)
         
-        # Create message
+        # Create message using canonical Message model
         message = Message(
-            role=role,
+            role=MessageRole(role),
             content=content,
-            tokens=tokens,
-            importance_score=importance_score
+            metadata={'tokens': tokens, 'importance': importance_score}
         )
         
         # Add to context
@@ -180,8 +134,8 @@ class ContextManager(BaseAgent):
         return Context(
             messages=list(self.messages),
             total_tokens=self.current_tokens,
-            original_tokens=self.original_tokens,
-            summary=self.conversation_summary
+            summary=self.conversation_summary,
+            metadata={'original_tokens': self.original_tokens}
         )
     
     def compress_context(self) -> int:
@@ -259,7 +213,7 @@ class ContextManager(BaseAgent):
         # Sort messages by importance (keep higher importance)
         messages_list = sorted(
             list(self.messages),
-            key=lambda m: m.importance_score,
+            key=lambda m: m.importance,
             reverse=True
         )
         
@@ -310,7 +264,7 @@ class ContextManager(BaseAgent):
             if len(first_sentence) > 100:
                 first_sentence = first_sentence[:100] + "..."
             
-            key_points.append(f"[{msg.role}] {first_sentence}")
+            key_points.append(f"[{msg.role.value}] {first_sentence}")
         
         summary = "Previous conversation summary:\n" + "\n".join(key_points)
         
