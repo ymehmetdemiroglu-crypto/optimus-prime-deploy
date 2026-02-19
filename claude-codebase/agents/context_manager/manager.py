@@ -102,8 +102,13 @@ class ContextManager(BaseAgent):
             importance_score = self._calculate_importance(content, role)
         
         # Create message using canonical Message model
+        try:
+            message_role = MessageRole(role.lower())
+        except ValueError:
+            valid = [r.value for r in MessageRole]
+            raise ValueError(f"Invalid role '{role}'. Must be one of: {valid}")
         message = Message(
-            role=MessageRole(role),
+            role=message_role,
             content=content,
             metadata={'tokens': tokens, 'importance': importance_score}
         )

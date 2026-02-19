@@ -131,7 +131,11 @@ class AnomalyDetectionService:
                 
                 if result and result.is_anomalous:
                     # Save alert to database
-                    alert = await self._save_alert(db, result, request.profile_id)
+                    alert = await self._save_alert(
+                        db, result, request.profile_id,
+                        entity_id=entity["id"],
+                        entity_type=request.entity_type.value,
+                    )
                     alerts.append(alert)
                     
             except Exception as e:
@@ -397,11 +401,13 @@ class AnomalyDetectionService:
         db: AsyncSession,
         result: AnomalyResult,
         profile_id: str,
+        entity_id: str,
+        entity_type: str,
     ) -> AnomalyAlert:
         """Save anomaly alert to database."""
         alert = AnomalyAlert(
-            entity_type=result.metric_name.split("_")[0],  # Extract type
-            entity_id=result.metric_name.split("_")[-1],    # Extract ID (simplified)
+            entity_type=entity_type,
+            entity_id=entity_id,
             entity_name=result.metric_name,
             profile_id=profile_id,
             anomaly_score=result.anomaly_score,

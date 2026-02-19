@@ -5,13 +5,14 @@ export interface Campaign {
   name: string
   campaign_type: string | null
   targeting_type: string | null
-  status: string
+  status: 'active' | 'paused' | 'archived'
   daily_budget: number
   ai_mode: string
   target_acos: number | null
   target_roas: number | null
   spend: number
   sales: number
+  acos: number
   clicks: number
   impressions: number
   orders: number

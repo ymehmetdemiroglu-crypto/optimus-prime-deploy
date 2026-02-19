@@ -10,11 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.database import get_db
-# Consolidated Model
-from app.modules.amazon_ppc.models.ppc_data import PPCCampaign, KeywordState
+from app.modules.amazon_ppc.models.ppc_data import PPCCampaign
 from app.models.schemas import DashboardSummary, PerformanceMetric, TrendDirection, AIAction
-# Removed legacy ppc_optimizer import
+from app.modules.amazon_ppc.optimization.engine import OptimizationEngine, OptimizationStrategy
 
 router = APIRouter()
 
@@ -54,10 +52,6 @@ async def get_chart_data(time_range: str = Query("7d", pattern="^(7d|30d|ytd)$",
     
     return data
 
-
-from datetime import datetime
-from app.modules.amazon_ppc.optimization.engine import OptimizationEngine, OptimizationStrategy, ActionType
-# Remove legacy import: from app.services.ppc_optimizer import compute_recommendations
 
 @router.get("/ai-actions", response_model=List[AIAction])
 async def get_ai_actions(db: AsyncSession = Depends(get_db)):
