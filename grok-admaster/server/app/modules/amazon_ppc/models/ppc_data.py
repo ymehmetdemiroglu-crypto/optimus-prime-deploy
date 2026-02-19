@@ -48,6 +48,7 @@ class PPCCampaign(Base):
     state = Column(String)
     daily_budget = Column(Numeric(10, 2))
     start_date = Column(DateTime(timezone=True))
+    portfolio_id = Column(String, nullable=True, index=True)  # Amazon Portfolio ID
     
     # --- Optimus Intelligence Fields (Consolidated) ---
     ai_mode = Column(Enum(AIStrategyType), default=AIStrategyType.MANUAL)

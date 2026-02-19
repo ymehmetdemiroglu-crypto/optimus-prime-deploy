@@ -302,14 +302,18 @@ class AnomalyDetectionService:
         """Fetch historical time-series data for LSTM detector."""
         since_date = datetime.utcnow() - timedelta(days=days)
         
-        # Query performance metrics
-        query = select(PerformanceMetric).where(
-            and_(
-                PerformanceMetric.entity_type == entity_type.value,
-                PerformanceMetric.entity_id == entity_id,
-                PerformanceMetric.date >= since_date,
+        # Query performance records using FK-based filters
+        if entity_type == EntityType.KEYWORD:
+            filter_clause = and_(
+                PerformanceRecord.keyword_id == int(entity_id),
+                PerformanceRecord.date >= since_date,
             )
-        ).order_by(PerformanceMetric.date.asc())
+        else:  # CAMPAIGN
+            filter_clause = and_(
+                PerformanceRecord.campaign_id == int(entity_id),
+                PerformanceRecord.date >= since_date,
+            )
+        query = select(PerformanceRecord).where(filter_clause).order_by(PerformanceRecord.date.asc())
         
         result = await db.execute(query)
         metrics = result.scalars().all()
@@ -338,13 +342,12 @@ class AnomalyDetectionService:
         entity_id: str,
     ) -> Optional[Dict[str, float]]:
         """Extract current features for streaming detector."""
-        # Get latest metric
-        query = select(PerformanceMetric).where(
-            and_(
-                PerformanceMetric.entity_type == entity_type.value,
-                PerformanceMetric.entity_id == entity_id,
-            )
-        ).order_by(PerformanceMetric.date.desc()).limit(1)
+        # Get latest performance record using FK-based filters
+        if entity_type == EntityType.KEYWORD:
+            filter_clause = PerformanceRecord.keyword_id == int(entity_id)
+        else:  # CAMPAIGN
+            filter_clause = PerformanceRecord.campaign_id == int(entity_id)
+        query = select(PerformanceRecord).where(filter_clause).order_by(PerformanceRecord.date.desc()).limit(1)
         
         result = await db.execute(query)
         metric = result.scalar_one_or_none()
