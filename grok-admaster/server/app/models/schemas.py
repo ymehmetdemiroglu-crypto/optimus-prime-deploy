@@ -50,11 +50,18 @@ class Campaign(BaseModel):
     id: str
     name: str
     status: CampaignStatus
+    campaign_type: Optional[str] = None
+    targeting_type: Optional[str] = None
     ai_mode: AIStrategy
     daily_budget: float
     spend: float
     sales: float
     acos: float
+    target_acos: Optional[float] = None
+    target_roas: Optional[float] = None
+    clicks: int = 0
+    impressions: int = 0
+    orders: int = 0
 
 
 class CampaignStrategyUpdate(BaseModel):

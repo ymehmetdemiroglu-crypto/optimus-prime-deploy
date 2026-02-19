@@ -1,16 +1,15 @@
 import { apiClient } from '../client'
 
 export interface Campaign {
-  id: number
-  campaign_id: string
+  id: string
   name: string
-  campaign_type: string
-  targeting_type: string
-  state: string
+  campaign_type: string | null
+  targeting_type: string | null
+  status: string
   daily_budget: number
   ai_mode: string
-  target_acos: number
-  target_roas: number
+  target_acos: number | null
+  target_roas: number | null
   spend: number
   sales: number
   clicks: number
@@ -25,12 +24,12 @@ export const campaignsApi = {
     return response.data
   },
 
-  getCampaign: async (campaignId: number): Promise<Campaign> => {
+  getCampaign: async (campaignId: string): Promise<Campaign> => {
     const response = await apiClient.get<Campaign>(`/campaigns/${campaignId}`)
     return response.data
   },
 
-  updateStrategy: async (campaignId: number, aiMode: string): Promise<Campaign> => {
+  updateStrategy: async (campaignId: string, aiMode: string): Promise<Campaign> => {
     const response = await apiClient.patch<Campaign>(`/campaigns/${campaignId}/strategy`, {
       ai_mode: aiMode,
     })
