@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime
 
 router = APIRouter()
 
@@ -134,7 +134,6 @@ MOCK_DASHBOARD = DashboardData(
 
 @router.get("/dashboard/{client_id}", response_model=DashboardData)
 async def get_client_dashboard(client_id: str):
-    # In a real app, we'd fetch data for the specific client_id
-    data = MOCK_DASHBOARD
-    data.last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return data
+    # In a real app, we'd fetch data for the specific client_id.
+    # Use model_copy to avoid mutating the shared module-level mock on every request.
+    return MOCK_DASHBOARD.model_copy(update={"last_updated": datetime.now().strftime("%Y-%m-%d %H:%M")})

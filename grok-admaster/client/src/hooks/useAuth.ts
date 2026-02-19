@@ -13,11 +13,17 @@ export function useAuth() {
       authApi.login(email, password),
     onSuccess: async (data) => {
       // Fetch user profile using the token directly (store not yet updated)
-      const meResponse = await apiClient.get('/auth/me', {
-        headers: { Authorization: `Bearer ${data.access_token}` },
-      })
-      setAuth(data.access_token, meResponse.data)
-      navigate(meResponse.data.role === 'admin' ? '/admin/dashboard' : '/client/dashboard')
+      try {
+        const meResponse = await apiClient.get('/auth/me', {
+          headers: { Authorization: `Bearer ${data.access_token}` },
+        })
+        setAuth(data.access_token, meResponse.data)
+        navigate(meResponse.data.role === 'admin' ? '/admin/dashboard' : '/client/dashboard')
+      } catch (err) {
+        console.error('Failed to fetch user profile after login:', err)
+        // Surface error through the mutation so callers can react
+        throw err
+      }
     },
   })
 

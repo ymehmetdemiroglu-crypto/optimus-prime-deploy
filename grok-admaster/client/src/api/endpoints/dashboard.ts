@@ -14,7 +14,7 @@ export interface PerformanceMetric {
   ad_sales: number
   spend: number
   impressions: number
-  clicks: number
+  clicks?: number  // Optional: not included in all chart-data responses
 }
 
 export interface AIAction {
@@ -28,11 +28,13 @@ export interface AIAction {
 export interface ClientMatrixNode {
   id: string
   name: string
+  logo: string
   status: 'healthy' | 'warning' | 'critical'
   sales: number
   spend: number
   acos: number
   acos_trend: number
+  apis: string[]
 }
 
 export const dashboardApi = {

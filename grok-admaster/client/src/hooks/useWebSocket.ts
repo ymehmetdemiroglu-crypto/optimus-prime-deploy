@@ -8,17 +8,26 @@ export interface ChatMessage {
   timestamp: string
 }
 
+const MAX_RECONNECT_ATTEMPTS = 10
+
 export function useWebSocket(clientId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const isUnmountedRef = useRef(false)
+  const retryCountRef = useRef(0)
 
   const connect = useCallback(() => {
+    if (isUnmountedRef.current) return
+
     const ws = new WebSocket(`${WS_BASE_URL}/ws/${clientId}`)
     wsRef.current = ws
 
-    ws.onopen = () => setIsConnected(true)
+    ws.onopen = () => {
+      retryCountRef.current = 0
+      setIsConnected(true)
+    }
 
     ws.onmessage = (event) => {
       try {
@@ -41,15 +50,21 @@ export function useWebSocket(clientId: string) {
 
     ws.onclose = () => {
       setIsConnected(false)
-      reconnectTimer.current = setTimeout(connect, 3000)
+      if (!isUnmountedRef.current && retryCountRef.current < MAX_RECONNECT_ATTEMPTS) {
+        retryCountRef.current += 1
+        reconnectTimer.current = setTimeout(connect, 3000)
+      }
     }
 
     ws.onerror = () => ws.close()
   }, [clientId])
 
   useEffect(() => {
+    isUnmountedRef.current = false
+    retryCountRef.current = 0
     connect()
     return () => {
+      isUnmountedRef.current = true
       clearTimeout(reconnectTimer.current)
       wsRef.current?.close()
     }

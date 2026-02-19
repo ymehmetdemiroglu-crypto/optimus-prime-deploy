@@ -1,8 +1,9 @@
 """
 Dashboard API endpoints with mock data. AI actions are driven by PPC optimizer.
 """
+import logging
 from fastapi import APIRouter, Query, Depends
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import random
@@ -10,12 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.database import get_db
-# Consolidated Model
-from app.modules.amazon_ppc.models.ppc_data import PPCCampaign, KeywordState
+from app.modules.amazon_ppc.models.ppc_data import PPCCampaign
 from app.models.schemas import DashboardSummary, PerformanceMetric, TrendDirection, AIAction
-# Removed legacy ppc_optimizer import
+from app.modules.amazon_ppc.optimization.engine import OptimizationEngine, OptimizationStrategy
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -54,10 +54,6 @@ async def get_chart_data(time_range: str = Query("7d", pattern="^(7d|30d|ytd)$",
     
     return data
 
-
-from datetime import datetime
-from app.modules.amazon_ppc.optimization.engine import OptimizationEngine, OptimizationStrategy, ActionType
-# Remove legacy import: from app.services.ppc_optimizer import compute_recommendations
 
 @router.get("/ai-actions", response_model=List[AIAction])
 async def get_ai_actions(db: AsyncSession = Depends(get_db)):
@@ -109,15 +105,17 @@ async def get_ai_actions(db: AsyncSession = Depends(get_db)):
                     campaign_name=c.name
                 ))
         except Exception as e:
-            print(f"Error generating plan for {c.id}: {e}")
+            logger.error(f"Error generating plan for campaign {c.id}: {e}", exc_info=True)
             continue
+
+    return all_actions
 
 
 class ClientMatrixNode(BaseModel):
     id: str
     name: str
     logo: str
-    status: str  # healthy, warning, critical
+    status: Literal["healthy", "warning", "critical"]
     sales: float
     spend: float
     acos: float

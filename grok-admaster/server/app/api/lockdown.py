@@ -1,32 +1,31 @@
 
 from fastapi import APIRouter, HTTPException
-from typing import List
+from typing import List, Literal
 from pydantic import BaseModel
 from datetime import datetime
-import random
 
 router = APIRouter()
 
 # --- Models ---
 
 class SystemIntegrity(BaseModel):
-    core_systems: str # "CRITICAL" | "STABLE" | "WARNING"
+    core_systems: Literal["CRITICAL", "STABLE", "WARNING"]
     core_systems_val: int
     firewall_load: int
-    encryption_layer: str # "STABLE" | "DEGRADED"
+    encryption_layer: Literal["STABLE", "DEGRADED"]
     network_integrity: int
 
 class Countermeasure(BaseModel):
     id: str
     name: str
     info: str
-    status: str # "Active" | "Inactive" | "Deploying"
+    status: Literal["Active", "Inactive", "Deploying"]
     last_run: str
     icon: str
 
 class SecurityLog(BaseModel):
     timestamp: str
-    level: str # "INFO" | "WARNING" | "CRITICAL" | "ERROR"
+    level: Literal["INFO", "WARNING", "CRITICAL", "ERROR"]
     event: str
     details: str
     color: str
@@ -37,6 +36,9 @@ class LockdownStatus(BaseModel):
     countermeasures: List[Countermeasure]
     logs: List[SecurityLog]
     defcon: int
+
+class LockdownToggleRequest(BaseModel):
+    active: bool
 
 # --- Mock Data ---
 
@@ -79,20 +81,19 @@ async def get_lockdown_status():
     )
 
 @router.post("/toggle")
-async def toggle_lockdown(active: bool):
+async def toggle_lockdown(body: LockdownToggleRequest):
+    active = body.active
     GLOBAL_LOCKDOWN_STATE["active"] = active
     GLOBAL_LOCKDOWN_STATE["defcon"] = 1 if active else 5
-    
-    # Add a log entry
-    timestamp = datetime.now().strftime("%H:%M:%S")
+
     MOCK_LOGS.insert(0, SecurityLog(
-        timestamp=timestamp,
+        timestamp=datetime.now().strftime("%H:%M:%S"),
         level="CRITICAL" if active else "INFO",
         event="LOCKDOWN_CHANGE",
         details=f"Lockdown {'INITIATED' if active else 'DEACTIVATED'}",
         color="text-red-500" if active else "text-green-500"
     ))
-    
+
     return {"status": "success", "active": active}
 
 @router.post("/countermeasure/{id}")

@@ -3,11 +3,12 @@ Anomaly API Endpoints
 ---------------------
 Exposes GPT-4 powered anomaly explanation to the frontend.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 import logging
 
+from app.core.config import settings
 from app.services.gpt4_anomaly_explainer import explain_anomaly, explain_multiple_anomalies
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/anomalies", tags=["Anomalies"])
 
 class AnomalyFeedItem(BaseModel):
     id: str
-    priority: str  # "high", "medium", "low"
+    priority: Literal["high", "medium", "low"]
     title: str
     subtitle: str
     metric: str
@@ -24,7 +25,7 @@ class AnomalyFeedItem(BaseModel):
     metric_label: str
     timestamp: str
     ai_recommendation: str
-    status: str = "active" # active, resolved, ignored
+    status: Literal["active", "resolved", "ignored"] = "active"
 
 
 class AnomalyExplainRequest(BaseModel):
@@ -86,14 +87,13 @@ async def explain_single_anomaly(request: AnomalyExplainRequest):
             campaign_context=request.campaign_context,
             historical_data=request.historical_data
         )
-        
         if result.get("error"):
             raise HTTPException(status_code=503, detail=result["error"])
-        
         return result
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Anomaly explanation failed: {str(e)}")
+        logger.error(f"Anomaly explanation failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -108,14 +108,13 @@ async def explain_batch_anomalies(request: MultiAnomalyRequest):
             anomalies=request.anomalies,
             campaign_context=request.campaign_context
         )
-        
         if result.get("error"):
             raise HTTPException(status_code=503, detail=result["error"])
-        
         return result
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Batch anomaly explanation failed: {str(e)}")
+        logger.error(f"Batch anomaly explanation failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -123,7 +122,11 @@ async def explain_batch_anomalies(request: MultiAnomalyRequest):
 async def test_gpt4_connection():
     """
     Test endpoint to verify GPT-4 via OpenRouter is working.
+    Only available in non-production environments.
     """
+    if settings.ENV.lower() == "production":
+        raise HTTPException(status_code=403, detail="Diagnostic endpoint disabled in production")
+
     from app.services.openrouter_client import call_gpt4
     
     result = await call_gpt4(
@@ -188,7 +191,7 @@ async def get_anomaly_feed():
             timestamp="11:20 AM",
             ai_recommendation="Update Image"
         ),
-         AnomalyFeedItem(
+        AnomalyFeedItem(
             id="anom_004",
             priority="high",
             title="Buy Box Loss Alert",
