@@ -68,6 +68,21 @@ class DeepBidOptimizer:
         
         self._load_model()
     
+    def _save_model(self):
+        """Save trained model to disk."""
+        try:
+            os.makedirs(os.path.dirname(self.model_path) or '.', exist_ok=True)
+            checkpoint = {
+                'model_state_dict': self.model.state_dict(),
+                'means': self.feature_means,
+                'stds': self.feature_stds,
+                'date': str(datetime.now()) if 'datetime' in dir() else 'unknown',
+            }
+            torch.save(checkpoint, self.model_path)
+            logger.info(f"Saved deep bid optimizer to {self.model_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save model: {e}")
+
     def _load_model(self):
         if os.path.exists(self.model_path):
             try:
