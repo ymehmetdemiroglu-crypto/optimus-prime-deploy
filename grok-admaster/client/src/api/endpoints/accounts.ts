@@ -13,7 +13,7 @@ export interface Profile {
 export interface AccountData {
   id: number
   name: string
-  amazon_account_id: string
+  amazon_account_id: string | null  // null until first Amazon API profile sync
   region: string
   status: string
   created_at: string
@@ -34,8 +34,8 @@ export const accountsApi = {
   },
 
   createAccount: async (data: {
-    company_name: string
-    primary_contact_email?: string
+    name: string
+    region?: string
   }): Promise<AccountData> => {
     const response = await apiClient.post<AccountData>('/accounts', data)
     return response.data

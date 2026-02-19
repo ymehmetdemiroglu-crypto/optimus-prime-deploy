@@ -1,4 +1,5 @@
 import { apiClient } from '../client'
+import { buildAccountParams } from '@/utils/api'
 
 export interface Campaign {
   id: string
@@ -19,8 +20,9 @@ export interface Campaign {
 
 export const campaignsApi = {
   getCampaigns: async (accountId?: number): Promise<Campaign[]> => {
-    const params = accountId ? { account_id: accountId } : {}
-    const response = await apiClient.get<Campaign[]>('/campaigns', { params })
+    const response = await apiClient.get<Campaign[]>('/campaigns', {
+      params: buildAccountParams(accountId),
+    })
     return response.data
   },
 

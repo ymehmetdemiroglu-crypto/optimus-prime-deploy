@@ -12,24 +12,9 @@ export function useActiveAccount() {
     staleTime: 5 * 60 * 1000,
   })
 
+  // Store type is AccountData, so data can be passed directly without reshaping.
   useEffect(() => {
-    if (data) {
-      setAccounts(
-        data.map((a) => ({
-          id: a.id,
-          name: a.name,
-          amazon_account_id: a.amazon_account_id,
-          region: a.region,
-          status: a.status,
-          profiles: a.profiles?.map((p) => ({
-            profile_id: p.profile_id,
-            country_code: p.country_code,
-            currency_code: p.currency_code,
-            is_active: p.is_active,
-          })),
-        }))
-      )
-    }
+    if (data) setAccounts(data)
   }, [data, setAccounts])
 
   return { activeAccount, accounts, setActiveAccount }

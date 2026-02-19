@@ -1,4 +1,5 @@
 import { apiClient } from '../client'
+import { buildAccountParams } from '@/utils/api'
 
 export interface DashboardSummary {
   total_sales: number
@@ -39,21 +40,23 @@ export interface ClientMatrixNode {
 
 export const dashboardApi = {
   getSummary: async (accountId?: number): Promise<DashboardSummary> => {
-    const params = accountId ? { account_id: accountId } : {}
-    const response = await apiClient.get<DashboardSummary>('/dashboard/summary', { params })
+    const response = await apiClient.get<DashboardSummary>('/dashboard/summary', {
+      params: buildAccountParams(accountId),
+    })
     return response.data
   },
 
   getChartData: async (accountId?: number, range = '7d'): Promise<PerformanceMetric[]> => {
-    const params: Record<string, string | number> = { range }
-    if (accountId) params.account_id = accountId
-    const response = await apiClient.get<PerformanceMetric[]>('/dashboard/chart-data', { params })
+    const response = await apiClient.get<PerformanceMetric[]>('/dashboard/chart-data', {
+      params: buildAccountParams(accountId, { range }),
+    })
     return response.data
   },
 
   getAIActions: async (accountId?: number): Promise<AIAction[]> => {
-    const params = accountId ? { account_id: accountId } : {}
-    const response = await apiClient.get<AIAction[]>('/dashboard/ai-actions', { params })
+    const response = await apiClient.get<AIAction[]>('/dashboard/ai-actions', {
+      params: buildAccountParams(accountId),
+    })
     return response.data
   },
 

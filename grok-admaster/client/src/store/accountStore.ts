@@ -1,19 +1,10 @@
 import { create } from 'zustand'
+import type { AccountData } from '@/api/endpoints/accounts'
 
-export interface Account {
-  id: number
-  name: string
-  amazon_account_id?: string
-  region?: string
-  status?: string
-  is_active?: boolean
-  profiles?: Array<{
-    profile_id: string
-    country_code: string
-    currency_code: string
-    is_active: boolean
-  }>
-}
+// AccountData from the API is the canonical account shape.
+// Using it directly eliminates the parallel interface definition that was
+// previously maintained separately and was prone to drift.
+export type Account = AccountData
 
 interface AccountState {
   activeAccount: Account | null

@@ -1,7 +1,7 @@
 """
 Pydantic models for Optimus Prime API.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 from enum import Enum
@@ -70,8 +70,11 @@ class CampaignStrategyUpdate(BaseModel):
 
 # Chat Models
 class ChatRequest(BaseModel):
-    message: str
-    context_asin: Optional[str] = None
+    message: str = Field(..., min_length=1, max_length=4000)
+    # ASIN format: 10 alphanumeric characters (e.g. B0DWK3C1R7)
+    context_asin: Optional[str] = Field(
+        default=None, pattern=r"^[A-Z0-9]{10}$"
+    )
 
 
 class ChatResponse(BaseModel):

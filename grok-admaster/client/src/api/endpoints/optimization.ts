@@ -1,4 +1,5 @@
 import { apiClient } from '../client'
+import { buildAccountParams } from '@/utils/api'
 
 export interface OptimizationPlan {
   campaign_id: number
@@ -41,8 +42,9 @@ export const optimizationApi = {
   },
 
   getAlerts: async (accountId?: number): Promise<OptimizationAlert[]> => {
-    const params = accountId ? { account_id: accountId } : {}
-    const response = await apiClient.get<OptimizationAlert[]>('/optimization/alerts', { params })
+    const response = await apiClient.get<OptimizationAlert[]>('/optimization/alerts', {
+      params: buildAccountParams(accountId),
+    })
     return response.data
   },
 }

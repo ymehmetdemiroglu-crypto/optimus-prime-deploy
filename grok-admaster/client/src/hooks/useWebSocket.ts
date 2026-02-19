@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { WS_BASE_URL } from '@/utils/constants'
+import type { ChatMessage } from '@/api/endpoints/chat'
 
-export interface ChatMessage {
-  id: string
-  sender: 'user' | 'optimus'
-  content: string
-  timestamp: string
-}
+// Re-export so existing consumers that import ChatMessage from this hook still work.
+export type { ChatMessage }
 
 const MAX_RECONNECT_ATTEMPTS = 10
 

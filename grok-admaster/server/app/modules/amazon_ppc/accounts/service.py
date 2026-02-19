@@ -1,16 +1,21 @@
+import uuid
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from .models import Account, Credential, Profile
+from .models import Account, Credential
 from .schemas import AccountCreate, CredentialCreate
 
 
 class AccountService:
     async def create_account(self, db: AsyncSession, account_in: AccountCreate) -> Account:
+        # amazon_account_id is required by the DB; use a stable placeholder if not yet
+        # known (it is updated after the first Amazon API profile sync).
+        amazon_id = account_in.amazon_account_id or f"pending_{uuid.uuid4().hex[:12]}"
         account = Account(
-            company_name=account_in.company_name,
-            primary_contact_email=account_in.primary_contact_email
+            name=account_in.name,
+            amazon_account_id=amazon_id,
+            region=account_in.region,
         )
         db.add(account)
         try:
@@ -38,8 +43,15 @@ class AccountService:
             raise
         return cred
 
-    async def get_accounts(self, db: AsyncSession) -> List[Account]:
-        query = select(Account).options(selectinload(Account.profiles))
+    async def get_accounts(
+        self, db: AsyncSession, skip: int = 0, limit: int = 100
+    ) -> List[Account]:
+        query = (
+            select(Account)
+            .options(selectinload(Account.profiles))
+            .offset(skip)
+            .limit(limit)
+        )
         result = await db.execute(query)
         return result.scalars().all()
 

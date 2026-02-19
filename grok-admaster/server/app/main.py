@@ -118,31 +118,28 @@ async def lifespan(app: FastAPI):
     try:
         seeded = await run_seed()
         if seeded:
-            print("Database seeded with initial campaigns.")
+            logger.info("Database seeded with initial campaigns.")
     except Exception as e:
-        print(f"Seed skipped or failed: {e}")
-        
+        logger.warning(f"Seed skipped or failed: {e}")
+
     # Start Persistent Scheduler for background tasks
     from app.core.scheduler import scheduler
     from app.services.orchestrator import orchestrator
     import asyncio
-    
-    # Define a sample background optimization task
+
+    # Background optimization task — runs every 24 hours
     async def daily_optimization_loop():
-        # In production, you would fetch all active accounts from DB
-        # For demo, we run for a specific target
-        print("Running daily AI optimization loop...")
+        logger.info("Running daily AI optimization loop...")
         # result = await orchestrator.execute_optimization_mission("ACC001", "B0DWK3C1R7")
-        # print(f"Mission complete: {result}")
-    
+        # logger.info(f"Mission complete: {result}")
+
     # Schedule it to run every 24 hours (1440 minutes)
     scheduler.schedule_task("daily_ai_optimization", daily_optimization_loop, 1440)
-    
+
     # Keep a reference on app.state so the task is not garbage-collected and
-    # can be properly cancelled during shutdown (a local variable alone is not
-    # enough — Python's GC can destroy a pending task and emit a warning).
+    # can be properly cancelled during shutdown.
     app.state.scheduler_task = asyncio.create_task(scheduler.start())
-    print("Persistent Scheduler initialized and running in background.")
+    logger.info("Persistent Scheduler initialized and running in background.")
 
     yield
 

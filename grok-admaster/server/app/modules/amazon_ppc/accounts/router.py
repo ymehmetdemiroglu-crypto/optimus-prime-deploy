@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.core.database import get_db
@@ -25,11 +25,13 @@ async def create_account(
 
 @router.get("/", response_model=List[AccountRead])
 async def list_accounts(
-    db: AsyncSession = Depends(get_db)
+    skip: int = Query(default=0, ge=0, description="Number of records to skip"),
+    limit: int = Query(default=100, ge=1, le=500, description="Max records to return"),
+    db: AsyncSession = Depends(get_db),
 ):
-    """List all Client Accounts."""
+    """List Client Accounts with pagination."""
     try:
-        return await account_service.get_accounts(db)
+        return await account_service.get_accounts(db, skip=skip, limit=limit)
     except Exception as e:
         logger.error(f"Failed to list accounts: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve accounts")
