@@ -36,6 +36,12 @@ class AmazonAdsAPIClient:
         """Close the aiohttp session."""
         if self._session and not self._session.closed:
             await self._session.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
     
     async def _refresh_access_token(self):
         """Refresh the access token using the refresh token."""
@@ -153,7 +159,10 @@ class AmazonAdsAPIClient:
         }
         
         response = await self._make_request("POST", endpoint, profile_id, json_data=payload)
-        return response.get("reportId")
+        report_id = response.get("reportId")
+        if report_id is None:
+            raise ValueError(f"Amazon API did not return a reportId. Response: {response}")
+        return report_id
     
     async def get_report(self, profile_id: str, report_id: str) -> Dict[str, Any]:
         """Check the status of a report request."""

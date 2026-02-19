@@ -195,7 +195,12 @@ class OptimizationEngine:
         current_bid = kw_features.get('current_bid', 0)
         current_acos = kw_features.get('acos', 0)
         data_maturity = kw_features.get('data_maturity', 0)
-        
+
+        # A missing keyword_id means the feature row is incomplete; executing
+        # an action with entity_id=None would corrupt the UPDATE statement.
+        if keyword_id is None:
+            return None
+
         # Skip if insufficient data
         if data_maturity < params['min_data_maturity']:
             return None

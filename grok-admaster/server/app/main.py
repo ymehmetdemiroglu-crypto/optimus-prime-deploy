@@ -138,16 +138,28 @@ async def lifespan(app: FastAPI):
     # Schedule it to run every 24 hours (1440 minutes)
     scheduler.schedule_task("daily_ai_optimization", daily_optimization_loop, 1440)
     
-    scheduler_task = asyncio.create_task(scheduler.start())
+    # Keep a reference on app.state so the task is not garbage-collected and
+    # can be properly cancelled during shutdown (a local variable alone is not
+    # enough — Python's GC can destroy a pending task and emit a warning).
+    app.state.scheduler_task = asyncio.create_task(scheduler.start())
     print("Persistent Scheduler initialized and running in background.")
-        
+
     yield
 
     # ===== Cleanup Phase 3 Components =====
     logger.info("Shutting down application...")
 
-    # Stop scheduler
+    # Stop scheduler: set the flag first so the loop exits cleanly, then
+    # cancel the asyncio task so we don't have to wait for the next 30-second
+    # sleep tick and avoid "Task was destroyed but it is pending!" warnings.
     scheduler.stop()
+    scheduler_task = getattr(app.state, "scheduler_task", None)
+    if scheduler_task and not scheduler_task.done():
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
     # Shutdown cache client
     from app.core.cache import cache_client

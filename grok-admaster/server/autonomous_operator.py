@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session, engine, Base
 from app.services.analytics.semantic_engine import SemanticIngestor, BleedDetector, OpportunityFinder
 from app.services.openrouter_service import OpenRouterClient
