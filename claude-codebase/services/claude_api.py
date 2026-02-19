@@ -157,7 +157,6 @@ class ClaudeAPIService:
                 'max_tokens': max_tokens,
                 'temperature': temperature,
                 'messages': messages,
-                'stream': True
             }
             
             if system:

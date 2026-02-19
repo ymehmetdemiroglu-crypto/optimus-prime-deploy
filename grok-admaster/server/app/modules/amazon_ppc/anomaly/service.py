@@ -425,16 +425,18 @@ class AnomalyDetectionService:
         )
         
         db.add(alert)
+
+        # Stage history record in the same transaction before committing
+        await self._archive_to_history(db, alert)
+
+        # Single commit for both alert and history (atomic)
         await db.commit()
         await db.refresh(alert)
-        
-        # Also archive to history
-        await self._archive_to_history(db, alert)
-        
+
         return alert
-    
+
     async def _archive_to_history(self, db: AsyncSession, alert: AnomalyAlert):
-        """Archive alert to history table for long-term analysis."""
+        """Stage history record for long-term analysis (caller commits)."""
         history = AnomalyHistory(
             entity_type=alert.entity_type,
             entity_id=alert.entity_id,
@@ -452,9 +454,8 @@ class AnomalyDetectionService:
             explanation=alert.explanation,
             root_causes=alert.root_causes,
         )
-        
+
         db.add(history)
-        await db.commit()
     
     # ═══════════════════════════════════════════════════════════════════
     #  Alert Management Methods

@@ -154,7 +154,7 @@ class ResponseGenerator(BaseAgent):
         if context.messages:
             parts.append("Recent messages:")
             for msg in context.messages[-10:]:  # Last 10 messages
-                parts.append(f"{msg.role}: {msg.content}")
+                parts.append(f"{msg.role.value}: {msg.content}")
         
         return "\n\n".join(parts)
     

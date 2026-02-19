@@ -12,7 +12,6 @@ from .schemas import (
     AnomalyDetectionResponse,
     AnomalyAlertRead,
     AnomalyAlertUpdate,
-    AnomalyHistoryRead,
     AnomalyStatistics,
     EntityType,
     SeverityLevel,

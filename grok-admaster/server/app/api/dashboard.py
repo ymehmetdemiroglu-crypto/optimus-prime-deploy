@@ -4,7 +4,7 @@ Dashboard API endpoints with mock data. AI actions are driven by PPC optimizer.
 from fastapi import APIRouter, Query, Depends
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,7 +101,7 @@ async def get_ai_actions(db: AsyncSession = Depends(get_db)):
                     id=f"{c.id}_{action.entity_id}_{action.action_type}",
                     action_type=action.action_type.value,
                     description=action.reasoning,
-                    timestamp=action.execution_time or datetime.now(), # Plan actions might not have time yet
+                    timestamp=action.execution_time or datetime.now(timezone.utc),
                     campaign_name=c.name
                 ))
         except Exception as e:
