@@ -48,18 +48,17 @@ class TestKeywordFeatureEngineer(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(features['embedding'], [0.1, 0.2])
 
     async def test_bulk_compute_features(self):
-        # Setup Mocks
-        kw1 = PPCKeyword(id=1, keyword_text="k1", campaign_id=10, match_type="EXACT", bid=1.0)
-        kw1.vector = MagicMock(embedding=[0.5, 0.5])
-        kw2 = PPCKeyword(id=2, keyword_text="k2", campaign_id=10, match_type="BROAD", bid=1.0)
-        kw2.vector = None 
+        # Setup Mocks - use MagicMock to simulate lightweight Row objects
+        # bulk_compute_features selects columns directly, so rows have .id, .keyword_text, .embedding etc.
+        kw1 = MagicMock(id=1, keyword_text="k1", match_type="EXACT", state="ENABLED", bid=1.0, embedding=[0.5, 0.5])
+        kw2 = MagicMock(id=2, keyword_text="k2", match_type="BROAD", state="ENABLED", bid=1.0, embedding=None)
         
         # DB Mocks
         perf_row1 = MagicMock(keyword_id=1, impressions=100, clicks=10, spend=5.0, sales=20.0, orders=1, days_active=10)
         perf_row2 = MagicMock(keyword_id=2, impressions=200, clicks=5, spend=2.0, sales=0.0, orders=0, days_active=10)
-        
+
         self.mock_db.execute.side_effect = [
-            MagicMock(scalars=lambda: MagicMock(all=lambda: [kw1, kw2])), # Keywords
+            MagicMock(all=lambda: [kw1, kw2]), # Keywords (bulk uses result.all(), not scalars)
             MagicMock(all=lambda: [perf_row1, perf_row2]) # Performance
         ]
         
