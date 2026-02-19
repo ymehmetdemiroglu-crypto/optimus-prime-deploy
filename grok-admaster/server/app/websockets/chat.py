@@ -20,11 +20,12 @@ def _get_mcp_client():
     if _mcp_client is None:
         from langchain_mcp_adapters.client import MultiServerMCPClient
         app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp_dsp_server.py"))
+        # Use "python3" — the POSIX standard; "py" is Windows-only and will fail on Linux.
         _mcp_client = MultiServerMCPClient(
             {
                 "dsp": {
                     "transport": "stdio",
-                    "command": "py",
+                    "command": "python3",
                     "args": [app_path],
                 }
             }
@@ -65,19 +66,24 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await manager.connect(websocket)
     executor = None
     try:
-        executor = await _create_agent_executor_once()
-    except Exception as e:
-        await manager.send_personal_message(
-            json.dumps({
-                "id": "optimus-init-error",
-                "sender": "optimus",
-                "content": f"Agent failed to initialize: {str(e)}. Check OPENROUTER_API_KEY and network.",
-                "timestamp": datetime.now().isoformat(),
-                "actions": [],
-            }),
-            websocket,
-        )
-    try:
+        try:
+            executor = await _create_agent_executor_once()
+        except Exception as e:
+            # Attempt to notify the client; ignore send errors (client may have left).
+            try:
+                await manager.send_personal_message(
+                    json.dumps({
+                        "id": "optimus-init-error",
+                        "sender": "optimus",
+                        "content": f"Agent failed to initialize: {str(e)}. Check OPENROUTER_API_KEY and network.",
+                        "timestamp": datetime.now().isoformat(),
+                        "actions": [],
+                    }),
+                    websocket,
+                )
+            except Exception:
+                pass
+
         while True:
             data = await websocket.receive_text()
             if executor is None:
@@ -99,4 +105,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             }
             await manager.send_personal_message(json.dumps(response_data), websocket)
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        # Catch-all: network resets, protocol errors, etc. — ensure cleanup still runs.
+        pass
+    finally:
+        # Always remove from the active pool regardless of how we exit.
         manager.disconnect(websocket)

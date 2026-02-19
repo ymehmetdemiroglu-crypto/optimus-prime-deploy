@@ -79,7 +79,10 @@ class PersistentTaskScheduler:
             try:
                 now = datetime.utcnow()
                 
-                for task_id, task_info in self.tasks.items():
+                # Snapshot tasks so that schedule_task() calls from other
+                # coroutines during an awaited execution cannot mutate the
+                # dict mid-iteration (RuntimeError: dictionary changed size).
+                for task_id, task_info in list(self.tasks.items()):
                     if not task_info.get('enabled', True):
                         continue
                         
