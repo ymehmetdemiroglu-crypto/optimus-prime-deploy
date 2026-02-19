@@ -10,11 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.logging_config import get_logger
 from app.modules.amazon_ppc.models.ppc_data import PPCCampaign
 from app.models.schemas import DashboardSummary, PerformanceMetric, TrendDirection, AIAction
 from app.modules.amazon_ppc.optimization.engine import OptimizationEngine, OptimizationStrategy
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -103,7 +105,7 @@ async def get_ai_actions(db: AsyncSession = Depends(get_db)):
                     campaign_name=c.name
                 ))
         except Exception as e:
-            print(f"Error generating plan for {c.id}: {e}")
+            logger.error(f"Error generating plan for {c.id}: {e}")
             continue
 
     return all_actions

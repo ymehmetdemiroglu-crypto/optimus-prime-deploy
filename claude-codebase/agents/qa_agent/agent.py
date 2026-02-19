@@ -54,28 +54,21 @@ class TestCase:
 class TestReport:
     """
     Test execution report.
-    
+
     Attributes:
         total_tests: Total number of tests
         passed: Number of passed tests
         failed: Number of failed tests
         errors: Number of errors
-        coverage: Test coverage percentage
+        pass_rate: Pass rate percentage (passed/total*100)
         test_cases: List of all test cases
     """
     total_tests: int
     passed: int
     failed: int
     errors: int
-    coverage: float
+    pass_rate: float
     test_cases: List[TestCase]
-    
-    @property
-    def success_rate(self) -> float:
-        """Calculate test success rate."""
-        if self.total_tests == 0:
-            return 0.0
-        return (self.passed / self.total_tests) * 100
 
 
 class QAAgent(BaseAgent):
@@ -186,20 +179,20 @@ class QAAgent(BaseAgent):
         
         # Create report
         total = len(test_cases)
-        coverage = (passed / total * 100) if total > 0 else 0
-        
+        pass_rate = (passed / total * 100) if total > 0 else 0
+
         report = TestReport(
             total_tests=total,
             passed=passed,
             failed=failed,
             errors=errors,
-            coverage=coverage,
+            pass_rate=pass_rate,
             test_cases=test_cases
         )
-        
+
         self.logger.info(
             f"Tests complete: {passed}/{total} passed "
-            f"({report.success_rate:.1f}% success rate)"
+            f"({report.pass_rate:.1f}% pass rate)"
         )
         
         return report

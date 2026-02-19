@@ -25,7 +25,7 @@ class AppConfig:
     """Main application configuration."""
     
     # Model settings
-    default_model: str = 'claude-3-sonnet-20240229'
+    default_model: str = 'claude-sonnet-4-5-20250929'
     models: Dict[str, ModelConfig] = None
     
     # Operation budgets

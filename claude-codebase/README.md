@@ -44,10 +44,6 @@ claude-codebase/
 ├── configs/                     # Configuration
 │   ├── settings.py             # Application settings
 │   └── token_limits.yaml       # Token budgets and limits
-├── data/                        # Data storage
-│   ├── cache/                  # Cached responses
-│   ├── context/                # Context snapshots
-│   └── logs/                   # Application logs
 ├── main.py                      # Application entry point
 ├── requirements.txt             # Python dependencies
 └── README.md                    # This file

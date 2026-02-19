@@ -32,7 +32,7 @@ class ClaudeAPIService:
     """
     
     def __init__(self, api_key: Optional[str] = None, 
-                 default_model: str = 'claude-3-sonnet-20240229'):
+                 default_model: str = 'claude-sonnet-4-5-20250929'):
         """
         Initialize Claude API service.
         

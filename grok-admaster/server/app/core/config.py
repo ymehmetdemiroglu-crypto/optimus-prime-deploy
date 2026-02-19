@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str  # No default - must be set via environment
-    POSTGRES_DB: str = "optimus_pryme"
+    POSTGRES_DB: str = "optimus_prime"
     POSTGRES_PORT: int = 5432
     
     # Direct URL override
