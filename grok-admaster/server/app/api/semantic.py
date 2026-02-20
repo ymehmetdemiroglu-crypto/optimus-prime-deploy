@@ -176,6 +176,83 @@ async def classify_intent(request: IntentClassifyRequest):
     }
 
 
+class ThresholdOverrideRequest(BaseModel):
+    account_id: int
+    intent: str  # transactional, informational_rufus, navigational, discovery
+    overrides: Dict[str, float]
+
+
+@router.get("/thresholds")
+async def get_thresholds(account_id: Optional[int] = None):
+    """
+    View the effective threshold profile for all intents.
+
+    If account_id is provided, returns thresholds with any per-account
+    overrides applied.  Otherwise returns the global defaults.
+    """
+    from app.services.ml.adaptive_thresholds import get_threshold_manager
+    manager = get_threshold_manager()
+    return {
+        "account_id": account_id,
+        "effective_thresholds": manager.get_full_profile(account_id),
+        "account_overrides": manager.get_account_overrides(account_id) if account_id else {},
+    }
+
+
+@router.put("/thresholds")
+async def set_thresholds(request: ThresholdOverrideRequest):
+    """
+    Set per-account threshold overrides for a specific intent type.
+
+    Example body:
+    {
+        "account_id": 42,
+        "intent": "informational_rufus",
+        "overrides": {
+            "bleed_threshold": 0.25,
+            "min_orders_to_graduate": 7
+        }
+    }
+    """
+    from app.services.ml.adaptive_thresholds import get_threshold_manager
+    from app.services.ml.intent_classifier import ShoppingIntent
+
+    try:
+        intent_enum = ShoppingIntent(request.intent)
+    except ValueError:
+        valid = [i.value for i in ShoppingIntent]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid intent '{request.intent}'. Valid: {valid}"
+        )
+
+    manager = get_threshold_manager()
+    try:
+        manager.set_overrides_bulk(request.account_id, intent_enum, request.overrides)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "status": "updated",
+        "account_id": request.account_id,
+        "intent": request.intent,
+        "effective_thresholds": manager.get_thresholds(intent_enum, request.account_id),
+    }
+
+
+@router.delete("/thresholds/{account_id}")
+async def reset_thresholds(account_id: int):
+    """Reset all threshold overrides for an account (revert to global defaults)."""
+    from app.services.ml.adaptive_thresholds import get_threshold_manager
+    manager = get_threshold_manager()
+    manager.reset_account(account_id)
+    return {
+        "status": "reset",
+        "account_id": account_id,
+        "effective_thresholds": manager.get_full_profile(account_id),
+    }
+
+
 @router.get("/patrol-log")
 async def get_patrol_log(limit: int = 50, db: AsyncSession = Depends(get_db)):
     """View recent autonomous patrol activity."""

@@ -47,30 +47,63 @@ class IntentResult:
         }
 
 
-# --- Intent threshold config (used by bleed/opportunity callers) ---
+# --- Intent threshold config (used by bleed/opportunity/graduation callers) ---
 
 INTENT_THRESHOLDS = {
     ShoppingIntent.TRANSACTIONAL: {
+        # Semantic
         "bleed_threshold": 0.35,
         "opportunity_floor": 0.75,
+        # Graduation
+        "min_orders_to_graduate": 3,
+        "prob_acos_threshold": 0.60,
+        "suggested_match_type": "exact",
+        # Negation
+        "min_clicks_to_negate": 10,
+        "acos_ceiling_for_negate": 0.50,
+        "min_spend_for_negate_by_acos": 5.0,
     },
     ShoppingIntent.INFORMATIONAL_RUFUS: {
+        # Semantic — Rufus queries have lower similarity by nature
         "bleed_threshold": 0.20,
         "opportunity_floor": 0.50,
+        # Graduation — Rufus traffic has a longer conversion funnel
+        "min_orders_to_graduate": 5,
+        "prob_acos_threshold": 0.50,
+        "suggested_match_type": "phrase",
+        # Negation — more lenient; Rufus terms deserve a longer trial
+        "min_clicks_to_negate": 20,
+        "acos_ceiling_for_negate": 0.65,
+        "min_spend_for_negate_by_acos": 10.0,
     },
     ShoppingIntent.NAVIGATIONAL: {
         "bleed_threshold": 0.30,
         "opportunity_floor": 0.70,
+        "min_orders_to_graduate": 2,
+        "prob_acos_threshold": 0.55,
+        "suggested_match_type": "exact",
+        "min_clicks_to_negate": 10,
+        "acos_ceiling_for_negate": 0.50,
+        "min_spend_for_negate_by_acos": 5.0,
     },
     ShoppingIntent.DISCOVERY: {
+        # Semantic — discovery queries are naturally far from specific products
         "bleed_threshold": 0.15,
         "opportunity_floor": 0.45,
+        # Graduation — exploratory; needs strong proof before exact match
+        "min_orders_to_graduate": 5,
+        "prob_acos_threshold": 0.50,
+        "suggested_match_type": "broad",
+        # Negation — very lenient; discovery traffic is top-of-funnel
+        "min_clicks_to_negate": 25,
+        "acos_ceiling_for_negate": 0.75,
+        "min_spend_for_negate_by_acos": 15.0,
     },
 }
 
 
 def get_intent_thresholds(intent: ShoppingIntent) -> Dict[str, float]:
-    """Return bleed/opportunity thresholds adjusted for the query intent."""
+    """Return all thresholds (semantic + graduation + negation) for the query intent."""
     return INTENT_THRESHOLDS.get(intent, INTENT_THRESHOLDS[ShoppingIntent.TRANSACTIONAL])
 
 
