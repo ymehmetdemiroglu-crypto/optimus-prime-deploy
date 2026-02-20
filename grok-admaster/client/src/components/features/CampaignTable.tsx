@@ -16,7 +16,7 @@ function CampaignTable({ campaigns, readonly = false }: CampaignTableProps) {
   const queryClient = useQueryClient()
 
   const strategyMutation = useMutation({
-    mutationFn: ({ id, mode }: { id: number; mode: string }) =>
+    mutationFn: ({ id, mode }: { id: string; mode: string }) =>
       campaignsApi.updateStrategy(id, mode),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['campaigns'] }),
   })
@@ -59,7 +59,7 @@ function CampaignTable({ campaigns, readonly = false }: CampaignTableProps) {
                       options={AI_MODES.map((m) => ({ value: m.value, label: m.label }))}
                       value={c.ai_mode}
                       onChange={(e) =>
-                        strategyMutation.mutate({ id: c.id, mode: e.target.value })
+                        strategyMutation.mutate({ id: String(c.id), mode: e.target.value })
                       }
                       className="w-40 py-1 text-xs"
                     />

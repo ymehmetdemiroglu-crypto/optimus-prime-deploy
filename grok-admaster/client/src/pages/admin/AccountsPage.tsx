@@ -14,7 +14,6 @@ function AccountsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [credentialAccountId, setCredentialAccountId] = useState<number | null>(null)
   const [clientUserAccountId, setClientUserAccountId] = useState<number | null>(null)
-  const queryClient = useQueryClient()
 
   const { data: accounts } = useQuery({
     queryKey: ['accounts'],

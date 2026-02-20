@@ -4,6 +4,7 @@ Implements a deep learning approach for bid prediction.
 """
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
+from datetime import datetime
 import os
 import logging
 import torch
@@ -76,7 +77,7 @@ class DeepBidOptimizer:
                 'model_state_dict': self.model.state_dict(),
                 'means': self.feature_means,
                 'stds': self.feature_stds,
-                'date': str(datetime.now()) if 'datetime' in dir() else 'unknown',
+                'date': str(datetime.now()),
             }
             torch.save(checkpoint, self.model_path)
             logger.info(f"Saved deep bid optimizer to {self.model_path}")

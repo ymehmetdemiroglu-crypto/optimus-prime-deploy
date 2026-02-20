@@ -8,6 +8,8 @@ export interface User {
   role: 'admin' | 'client'
   client_account_id?: number | null
   is_active: boolean
+  last_login?: string | null
+  created_at?: string | null
 }
 
 interface AuthState {

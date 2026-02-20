@@ -6,6 +6,7 @@ export interface Campaign {
   campaign_type: string | null
   targeting_type: string | null
   status: string
+  state: string
   daily_budget: number
   ai_mode: string
   target_acos: number | null

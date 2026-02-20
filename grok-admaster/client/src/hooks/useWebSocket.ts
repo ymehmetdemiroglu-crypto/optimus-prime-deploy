@@ -14,46 +14,46 @@ export function useWebSocket(clientId: string) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  const connect = useCallback(() => {
-    const ws = new WebSocket(`${WS_BASE_URL}/ws/${clientId}`)
-    wsRef.current = ws
-
-    ws.onopen = () => setIsConnected(true)
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data as string) as ChatMessage
-        setMessages((prev) => [...prev, {
-          ...data,
-          id: data.id || `optimus-${Date.now()}`,
-          sender: 'optimus',
-          timestamp: data.timestamp || new Date().toISOString(),
-        }])
-      } catch {
-        setMessages((prev) => [...prev, {
-          id: `optimus-${Date.now()}`,
-          sender: 'optimus',
-          content: String(event.data),
-          timestamp: new Date().toISOString(),
-        }])
-      }
-    }
-
-    ws.onclose = () => {
-      setIsConnected(false)
-      reconnectTimer.current = setTimeout(connect, 3000)
-    }
-
-    ws.onerror = () => ws.close()
-  }, [clientId])
-
   useEffect(() => {
+    const connect = () => {
+      const ws = new WebSocket(`${WS_BASE_URL}/ws/${clientId}`)
+      wsRef.current = ws
+
+      ws.onopen = () => setIsConnected(true)
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data as string) as ChatMessage
+          setMessages((prev) => [...prev, {
+            ...data,
+            id: data.id || `optimus-${Date.now()}`,
+            sender: 'optimus',
+            timestamp: data.timestamp || new Date().toISOString(),
+          }])
+        } catch {
+          setMessages((prev) => [...prev, {
+            id: `optimus-${Date.now()}`,
+            sender: 'optimus',
+            content: String(event.data),
+            timestamp: new Date().toISOString(),
+          }])
+        }
+      }
+
+      ws.onclose = () => {
+        setIsConnected(false)
+        reconnectTimer.current = setTimeout(connect, 3000)
+      }
+
+      ws.onerror = () => ws.close()
+    }
+
     connect()
     return () => {
       clearTimeout(reconnectTimer.current)
       wsRef.current?.close()
     }
-  }, [connect])
+  }, [clientId])
 
   const sendMessage = useCallback((content: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
