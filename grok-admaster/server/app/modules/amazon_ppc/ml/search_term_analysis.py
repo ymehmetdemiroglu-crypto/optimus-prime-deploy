@@ -125,9 +125,21 @@ class SearchTermAnalyzer:
     """
     Comprehensive search term analysis for PPC optimization.
     """
-    
+
     def __init__(self):
         self.tfidf = TFIDFVectorizer(max_features=500)
+        self._intent_classifier = None
+
+    @property
+    def intent_classifier(self):
+        """Lazy-load the intent classifier to avoid circular imports."""
+        if self._intent_classifier is None:
+            try:
+                from app.services.ml.intent_classifier import get_intent_classifier
+                self._intent_classifier = get_intent_classifier()
+            except Exception as e:
+                logger.warning(f"Intent classifier unavailable: {e}")
+        return self._intent_classifier
     
     def analyze_search_terms(
         self,
@@ -150,18 +162,21 @@ class SearchTermAnalyzer:
         # Extract patterns
         word_performance = self._analyze_word_performance(search_term_data)
         ngram_performance = self._analyze_ngram_performance(search_term_data)
-        
+
         # Categorize terms
         categories = self._categorize_terms(search_term_data, target_acos)
-        
+
         # Find patterns
         patterns = self._find_patterns(search_term_data)
-        
+
+        # Intent analysis (Rufus/Cosmo)
+        intent_breakdown = self._analyze_intents(search_term_data)
+
         # Generate recommendations
         recommendations = self._generate_recommendations(
             word_performance, categories, target_acos
         )
-        
+
         return {
             'summary': {
                 'total_terms': len(terms),
@@ -180,6 +195,7 @@ class SearchTermAnalyzer:
             )[:30]),
             'categories': categories,
             'patterns': patterns,
+            'intent_breakdown': intent_breakdown,
             'recommendations': recommendations
         }
     
@@ -333,6 +349,74 @@ class SearchTermAnalyzer:
             'question_based': question_terms
         }
     
+    def _analyze_intents(
+        self,
+        data: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Classify search terms by shopping intent (Rufus/Cosmo optimization)."""
+        classifier = self.intent_classifier
+        if classifier is None:
+            return {'available': False, 'reason': 'Intent classifier not loaded'}
+
+        intent_buckets: Dict[str, List[Dict[str, Any]]] = {
+            'transactional': [],
+            'informational_rufus': [],
+            'navigational': [],
+            'discovery': [],
+        }
+        intent_spend: Dict[str, float] = {k: 0.0 for k in intent_buckets}
+        intent_sales: Dict[str, float] = {k: 0.0 for k in intent_buckets}
+
+        for record in data:
+            term = record.get('term', '')
+            result = classifier.classify(term)
+            intent_key = result.intent.value
+
+            entry = {
+                'term': term,
+                'intent': intent_key,
+                'confidence': round(result.confidence, 3),
+                'spend': round(record.get('spend', 0), 2),
+                'sales': round(record.get('sales', 0), 2),
+                'clicks': record.get('clicks', 0),
+            }
+            intent_buckets[intent_key].append(entry)
+            intent_spend[intent_key] += record.get('spend', 0)
+            intent_sales[intent_key] += record.get('sales', 0)
+
+        # Build summary
+        total_spend = sum(intent_spend.values()) or 1
+        total_sales = sum(intent_sales.values()) or 1
+
+        summary = {}
+        for intent_key in intent_buckets:
+            count = len(intent_buckets[intent_key])
+            spend = intent_spend[intent_key]
+            sales = intent_sales[intent_key]
+            summary[intent_key] = {
+                'count': count,
+                'spend': round(spend, 2),
+                'sales': round(sales, 2),
+                'acos': round(spend / sales * 100, 2) if sales > 0 else None,
+                'spend_share': round(spend / total_spend * 100, 1),
+                'sales_share': round(sales / total_sales * 100, 1),
+            }
+
+        # Top 5 Rufus terms by spend (these need special threshold treatment)
+        rufus_top = sorted(
+            intent_buckets['informational_rufus'],
+            key=lambda x: x['spend'],
+            reverse=True
+        )[:10]
+
+        return {
+            'available': True,
+            'summary': summary,
+            'rufus_top_terms': rufus_top,
+            'total_rufus_spend': round(intent_spend['informational_rufus'], 2),
+            'total_discovery_spend': round(intent_spend['discovery'], 2),
+        }
+
     def _generate_recommendations(
         self,
         word_performance: Dict[str, Dict[str, float]],

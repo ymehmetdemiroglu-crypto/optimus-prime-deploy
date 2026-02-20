@@ -25,6 +25,10 @@ class SearchTermEmbedding(Base):
     sales = Column(Numeric(15, 2), default=0)
     orders = Column(Integer, default=0)
     acos = Column(Numeric(8, 4))
+    # Rufus/Cosmo intent classification
+    intent_type = Column(String(30), default="unclassified")   # transactional, informational_rufus, navigational, discovery
+    query_source = Column(String(20), default="organic")       # organic, rufus, cosmo_matched
+    intent_confidence = Column(Numeric(6, 4))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

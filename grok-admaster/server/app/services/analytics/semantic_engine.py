@@ -18,6 +18,9 @@ from app.models.semantic import (
     SearchTermEmbedding, ProductEmbedding,
     SemanticBleedLog, SemanticOpportunityLog
 )
+from app.services.ml.intent_classifier import (
+    get_intent_classifier, get_intent_thresholds, ShoppingIntent
+)
 
 logger = logging.getLogger("semantic_engine")
 
@@ -88,9 +91,13 @@ class SemanticIngestor:
         logger.info(f"Generating embeddings for {len(terms)} search terms...")
         embeddings = embedding_service.embed_batch(terms)
         
+        # Classify intent for each search term
+        classifier = get_intent_classifier()
+        intent_results = classifier.classify_batch(terms)
+
         # Insert into search_term_embeddings
         objects = []
-        for row, emb in zip(rows, embeddings):
+        for row, emb, intent_result in zip(rows, embeddings, intent_results):
             obj = SearchTermEmbedding(
                 term=row.search_term,
                 embedding=emb,
@@ -102,6 +109,8 @@ class SemanticIngestor:
                 sales=row.total_sales or 0,
                 orders=row.total_orders or 0,
                 acos=row.acos,
+                intent_type=intent_result.intent.value,
+                intent_confidence=Decimal(str(round(intent_result.confidence, 4))),
             )
             objects.append(obj)
         
@@ -176,23 +185,38 @@ class BleedDetector:
         account_id: int,
         similarity_threshold: float = 0.40,
         min_spend: float = 1.00,
-        limit: int = 50
+        limit: int = 50,
+        intent_aware: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Find search terms that are wasting budget.
-        
+
+        When intent_aware=True, each result is re-evaluated against
+        intent-specific thresholds so Rufus/discovery traffic isn't
+        incorrectly flagged as bleed.
+
         Args:
             asin: The product ASIN to check bleed against.
             account_id: Client account ID.
-            similarity_threshold: Terms below this similarity are flagged (0-1).
+            similarity_threshold: Default threshold (used as ceiling for intent-aware mode).
             min_spend: Minimum spend to consider (filters noise).
             limit: Max results.
-            
+            intent_aware: Apply Rufus/Cosmo-aware threshold adjustments.
+
         Returns:
             List of bleed candidates with term, similarity, spend, etc.
         """
+        # Use the most lenient threshold for the SQL query to cast a wide net;
+        # intent-specific filtering happens post-query.
+        sql_threshold = similarity_threshold
+        if intent_aware:
+            sql_threshold = max(
+                similarity_threshold,
+                max(t["bleed_threshold"] for t in get_intent_thresholds.__func__.__defaults__ or [similarity_threshold])  # type: ignore[union-attr]
+            ) if False else similarity_threshold  # keep original for SQL; filter below
+
         query = text("""
-            SELECT 
+            SELECT
                 ste.id as embedding_id,
                 ste.term,
                 ROUND((1 - (ste.embedding <=> pe.embedding))::NUMERIC, 4) AS similarity,
@@ -200,6 +224,7 @@ class BleedDetector:
                 ste.clicks,
                 ste.impressions,
                 ste.acos,
+                ste.intent_type,
                 pe.id as product_embedding_id
             FROM search_term_embeddings ste
             CROSS JOIN product_embeddings pe
@@ -211,7 +236,7 @@ class BleedDetector:
             ORDER BY ste.spend DESC
             LIMIT :limit
         """)
-        
+
         result = await self.db.execute(query, {
             "asin": asin,
             "account_id": account_id,
@@ -220,25 +245,45 @@ class BleedDetector:
             "limit": limit
         })
         rows = result.fetchall()
-        
+
+        classifier = get_intent_classifier() if intent_aware else None
+
         bleed_items = []
         for row in rows:
+            sim = float(row.similarity)
+            intent_str = getattr(row, "intent_type", None) or "unclassified"
+
+            # Intent-aware filtering: reclassify if needed, then check threshold
+            if intent_aware and classifier:
+                if intent_str == "unclassified":
+                    intent_result = classifier.classify(row.term)
+                    intent_str = intent_result.intent.value
+                try:
+                    intent_enum = ShoppingIntent(intent_str)
+                except ValueError:
+                    intent_enum = ShoppingIntent.TRANSACTIONAL
+                intent_thresh = get_intent_thresholds(intent_enum)["bleed_threshold"]
+                # If similarity is above the intent-adjusted threshold, it's NOT bleed
+                if sim >= intent_thresh:
+                    continue
+
             bleed_items.append({
                 "embedding_id": str(row.embedding_id),
                 "product_embedding_id": str(row.product_embedding_id),
                 "term": row.term,
-                "semantic_similarity": float(row.similarity),
+                "semantic_similarity": sim,
                 "spend": float(row.spend),
                 "clicks": row.clicks,
                 "impressions": row.impressions,
                 "acos": float(row.acos) if row.acos else None,
+                "intent_type": intent_str,
                 "recommendation": "ADD_NEGATIVE",
                 "urgency": "HIGH" if float(row.spend) > 10 else "MEDIUM"
             })
-        
+
         logger.info(
             f"Bleed scan for {asin}: found {len(bleed_items)} bleeding terms "
-            f"(threshold={similarity_threshold}, min_spend=${min_spend})"
+            f"(threshold={similarity_threshold}, intent_aware={intent_aware}, min_spend=${min_spend})"
         )
         return bleed_items
     
@@ -281,30 +326,46 @@ class OpportunityFinder:
         account_id: int,
         similarity_floor: float = 0.70,
         min_orders: int = 1,
-        limit: int = 30
+        limit: int = 30,
+        intent_aware: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Find high-value semantic clusters you're missing.
-        
+
+        When intent_aware=True, Rufus/discovery terms are included at a
+        lower similarity floor since conversational queries naturally
+        have lower cosine similarity to product embeddings.
+
         Args:
             asin: The product ASIN.
             account_id: Client account ID.
-            similarity_floor: Minimum similarity to be considered relevant.
+            similarity_floor: Default similarity floor for transactional terms.
             min_orders: Minimum conversions to prove demand.
             limit: Max results.
-            
+            intent_aware: Apply Rufus/Cosmo-aware floor adjustments.
+
         Returns:
             List of opportunity candidates.
         """
+        # Use the lowest intent-aware floor in SQL to capture more candidates
+        sql_floor = similarity_floor
+        if intent_aware:
+            lowest_floor = min(
+                t["opportunity_floor"]
+                for t in [get_intent_thresholds(i) for i in ShoppingIntent]
+            )
+            sql_floor = min(similarity_floor, lowest_floor)
+
         query = text("""
-            SELECT 
+            SELECT
                 ste.term,
                 ROUND((1 - (ste.embedding <=> pe.embedding))::NUMERIC, 4) AS similarity,
                 ste.impressions,
                 ste.clicks,
                 ste.sales,
                 ste.orders,
-                ste.acos
+                ste.acos,
+                ste.intent_type
             FROM search_term_embeddings ste
             CROSS JOIN product_embeddings pe
             WHERE pe.asin = :asin
@@ -315,38 +376,57 @@ class OpportunityFinder:
             ORDER BY similarity DESC, ste.sales DESC
             LIMIT :limit
         """)
-        
+
         result = await self.db.execute(query, {
             "asin": asin,
             "account_id": account_id,
-            "sim_floor": similarity_floor,
+            "sim_floor": sql_floor,
             "min_orders": min_orders,
             "limit": limit
         })
         rows = result.fetchall()
-        
+
+        classifier = get_intent_classifier() if intent_aware else None
+
         opportunities = []
         for row in rows:
+            sim = float(row.similarity)
+            intent_str = getattr(row, "intent_type", None) or "unclassified"
+
+            # Intent-aware floor check
+            if intent_aware and classifier:
+                if intent_str == "unclassified":
+                    intent_result = classifier.classify(row.term)
+                    intent_str = intent_result.intent.value
+                try:
+                    intent_enum = ShoppingIntent(intent_str)
+                except ValueError:
+                    intent_enum = ShoppingIntent.TRANSACTIONAL
+                intent_floor = get_intent_thresholds(intent_enum)["opportunity_floor"]
+                if sim < intent_floor:
+                    continue
+
             suggested_bid = self._calculate_suggested_bid(
                 float(row.sales or 0), row.clicks or 1, float(row.acos or 30)
             )
             opportunities.append({
                 "term": row.term,
-                "semantic_similarity": float(row.similarity),
+                "semantic_similarity": sim,
                 "impressions": row.impressions,
                 "clicks": row.clicks,
                 "sales": float(row.sales) if row.sales else 0,
                 "orders": row.orders,
                 "acos": float(row.acos) if row.acos else None,
-                "suggested_match_type": "exact" if float(row.similarity) > 0.85 else "phrase",
+                "intent_type": intent_str,
+                "suggested_match_type": "exact" if sim > 0.85 else "phrase",
                 "suggested_bid": suggested_bid,
                 "recommendation": "ADD_AS_TARGET",
-                "confidence": "HIGH" if float(row.similarity) > 0.85 and row.orders >= 3 else "MEDIUM"
+                "confidence": "HIGH" if sim > 0.85 and row.orders >= 3 else "MEDIUM"
             })
-        
+
         logger.info(
             f"Opportunity scan for {asin}: found {len(opportunities)} targets "
-            f"(similarity>={similarity_floor}, min_orders={min_orders})"
+            f"(floor={sql_floor}, intent_aware={intent_aware}, min_orders={min_orders})"
         )
         return opportunities
     

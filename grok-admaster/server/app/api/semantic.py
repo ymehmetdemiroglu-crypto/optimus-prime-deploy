@@ -6,6 +6,7 @@ Endpoints:
 - POST /embed-product → Embed a single product (ASIN + title)
 - POST /bleed       → Run bleed detection for a product
 - POST /opportunities → Run opportunity discovery for a product
+- POST /classify-intent → Classify search terms by shopping intent (Rufus/Cosmo)
 - GET  /patrol-log  → View recent autonomous patrol activity
 """
 from fastapi import APIRouter, Depends, HTTPException
@@ -37,12 +38,17 @@ class BleedRequest(BaseModel):
     account_id: int
     similarity_threshold: float = 0.40
     min_spend: float = 1.00
+    intent_aware: bool = True
 
 class OpportunityRequest(BaseModel):
     asin: str
     account_id: int
     similarity_floor: float = 0.70
     min_orders: int = 1
+    intent_aware: bool = True
+
+class IntentClassifyRequest(BaseModel):
+    queries: List[str]
 
 
 # --- Endpoints ---
@@ -65,7 +71,7 @@ async def semantic_health():
 
 @router.post("/ingest")
 async def ingest_search_terms(request: IngestRequest, db: AsyncSession = Depends(get_db)):
-    """Trigger embedding generation for search terms that haven't been processed yet."""
+    """Trigger embedding generation + intent classification for unprocessed search terms."""
     ingestor = SemanticIngestor(db)
     count = await ingestor.ingest_search_terms(request.account_id, request.limit)
     return {
@@ -94,43 +100,79 @@ async def embed_product(request: EmbedProductRequest, db: AsyncSession = Depends
 
 @router.post("/bleed")
 async def detect_bleed(request: BleedRequest, db: AsyncSession = Depends(get_db)):
-    """Run semantic bleed detection for a product."""
+    """Run semantic bleed detection with intent-aware thresholds."""
     detector = BleedDetector(db)
     results = await detector.detect_bleed(
         asin=request.asin,
         account_id=request.account_id,
         similarity_threshold=request.similarity_threshold,
-        min_spend=request.min_spend
+        min_spend=request.min_spend,
+        intent_aware=request.intent_aware
     )
-    
+
     total_waste = sum(r["spend"] for r in results)
     return {
         "status": "completed",
         "asin": request.asin,
         "bleed_count": len(results),
         "total_wasted_spend": round(total_waste, 2),
+        "intent_aware": request.intent_aware,
         "results": results
     }
 
 
 @router.post("/opportunities")
 async def find_opportunities(request: OpportunityRequest, db: AsyncSession = Depends(get_db)):
-    """Run semantic opportunity discovery for a product."""
+    """Run semantic opportunity discovery with intent-aware floors."""
     finder = OpportunityFinder(db)
     results = await finder.find_opportunities(
         asin=request.asin,
         account_id=request.account_id,
         similarity_floor=request.similarity_floor,
-        min_orders=request.min_orders
+        min_orders=request.min_orders,
+        intent_aware=request.intent_aware
     )
-    
+
     total_potential = sum(r["sales"] for r in results)
     return {
         "status": "completed",
         "asin": request.asin,
         "opportunity_count": len(results),
         "total_revenue_potential": round(total_potential, 2),
+        "intent_aware": request.intent_aware,
         "results": results
+    }
+
+
+@router.post("/classify-intent")
+async def classify_intent(request: IntentClassifyRequest):
+    """
+    Classify search queries by shopping intent type.
+
+    Intent types:
+    - transactional: Direct purchase intent
+    - informational_rufus: Research/comparison queries (Rufus AI traffic)
+    - navigational: Brand-specific navigation
+    - discovery: Category exploration
+
+    Returns per-query intent, confidence, and scoring breakdown.
+    """
+    if not request.queries:
+        raise HTTPException(status_code=400, detail="queries list must not be empty")
+    if len(request.queries) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 queries per request")
+
+    from app.services.ml.intent_classifier import get_intent_classifier, INTENT_THRESHOLDS, ShoppingIntent
+    classifier = get_intent_classifier()
+    results = classifier.classify_batch(request.queries)
+
+    return {
+        "status": "completed",
+        "count": len(results),
+        "results": [r.to_dict() for r in results],
+        "intent_thresholds": {
+            k.value: v for k, v in INTENT_THRESHOLDS.items()
+        }
     }
 
 
@@ -141,7 +183,7 @@ async def get_patrol_log(limit: int = 50, db: AsyncSession = Depends(get_db)):
         "SELECT * FROM autonomous_patrol_log ORDER BY executed_at DESC LIMIT :limit"
     ), {"limit": limit})
     rows = result.fetchall()
-    
+
     return {
         "total": len(rows),
         "logs": [
