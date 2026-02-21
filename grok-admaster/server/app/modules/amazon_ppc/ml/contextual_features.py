@@ -44,10 +44,14 @@ CONTEXT_FEATURE_NAMES: List[str] = [
     "bid_to_cpc_ratio",              # Current bid / avg CPC
     "keyword_competition_score",      # 0-1 competition density
 
-    # Keyword meta (3 features)
+    # Keyword meta (7 features)
     "match_type_encoded",             # exact=1, phrase=0.5, broad=0
     "log_impressions_total",          # log(1+total impressions)
     "log_spend_total",                # log(1+total spend)
+    "rufus_intent_probability",       # Probability of conversational intent
+    "query_length_norm",              # Normalized word count
+    "question_tf_idf_weight",         # TF-IDF style question word weight
+    "intent_confidence_score",        # Confidence of intent classification
 ]
 
 CONTEXT_DIM = len(CONTEXT_FEATURE_NAMES)  # 23
@@ -251,11 +255,11 @@ class ContextFeatureExtractor:
     # ── keyword meta features (DB) ────────────────────────────────────
     async def _keyword_meta_features(self, keyword_id: int) -> np.ndarray:
         """Static keyword properties."""
-        defaults = np.zeros(3, dtype=np.float64)
+        defaults = np.zeros(7, dtype=np.float64)
 
         try:
             result = await self.db.execute(text("""
-                SELECT match_type, impressions, spend
+                SELECT keyword_text, match_type, impressions, spend
                 FROM ppc_keywords
                 WHERE id = :kid
             """), {"kid": keyword_id})
@@ -272,10 +276,33 @@ class ContextFeatureExtractor:
             imps = float(row["impressions"] or 0)
             spend = float(row["spend"] or 0)
 
+            kw_text = str(row.get("keyword_text") or "").lower()
+            words = kw_text.split()
+            word_count = len(words)
+            
+            # Query length norm (assuming typical transactional is 2-3, max around 10)
+            query_length_norm = min(word_count / 10.0, 1.0)
+            
+            # Question TF-IDF weight proxy
+            question_words = {'how', 'what', 'where', 'why', 'which', 'best', 'compare', 'vs', 'difference'}
+            q_count = sum(1 for w in words if w in question_words)
+            question_tf = (q_count / word_count) if word_count > 0 else 0.0
+            question_tf_idf_weight = min(question_tf * 2.0, 1.0)
+            
+            # Rufus intent probability
+            rufus_intent_prob = min((query_length_norm * 0.4) + (question_tf_idf_weight * 0.8), 1.0)
+            
+            # Intent confidence score proxy
+            intent_confidence = 0.5 + min(abs(rufus_intent_prob - 0.5) * 2, 0.5)
+
             return np.array([
                 mt_encoded,
                 math.log1p(imps) / 15.0,   # normalise (log scale)
                 math.log1p(spend) / 10.0,
+                rufus_intent_prob,
+                query_length_norm,
+                question_tf_idf_weight,
+                intent_confidence
             ], dtype=np.float64)
 
         except Exception as e:

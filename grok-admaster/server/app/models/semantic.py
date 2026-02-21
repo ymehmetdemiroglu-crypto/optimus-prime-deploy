@@ -18,6 +18,7 @@ class SearchTermEmbedding(Base):
     embedding = Column(Vector(384))  # MiniLM-L6-v2 output dim
     account_id = Column(Integer, ForeignKey("accounts.id"))
     campaign_id = Column(Integer, ForeignKey("ppc_campaigns.id"))
+    query_source = Column(String(50), nullable=False, default="organic")
     source = Column(String(50), default="search_query_report")
     impressions = Column(Integer, default=0)
     clicks = Column(Integer, default=0)
@@ -37,6 +38,7 @@ class ProductEmbedding(Base):
     title = Column(Text)
     source_text = Column(Text)
     embedding = Column(Vector(384))
+    cosmo_embedding = Column(Vector(1024))
     account_id = Column(Integer, ForeignKey("accounts.id"))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

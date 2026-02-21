@@ -44,3 +44,35 @@ def test_no_graduate_when_orders_too_low():
     ]
     result = compute_graduation(terms, target_acos=25.0, min_orders_to_graduate=5)
     assert len(result["to_graduate"]) == 0
+
+def test_to_graduate_rufus_rules():
+    terms = [
+        # Rufus keyword with generous orders but bad probability -> shouldn't graduate (prob < 0.50)
+        {"clicks": 50, "orders": 6, "spend": 30.0, "sales": 100.0, "keyword_text": "rufus bad prob", "campaign_id": "c1", "query_source": "rufus"},
+        # Rufus keyword with good probability but not enough orders (4 < 5)
+        {"clicks": 50, "orders": 4, "spend": 20.0, "sales": 100.0, "keyword_text": "rufus low orders", "campaign_id": "c1", "query_source": "rufus"},
+    ]
+    # We fake the bayesian score internally. If we pass ACoS=20%, a spend of 30 and sales 100 is 30%.
+    # Actually, we can just test if the parameters are used. Wait, score_keywords_bayesian computes prob_below.
+    # To reliably test without mocking the bayesian function, we'll just test the organic ones and assume the threshold logic is sound,
+    # or mock it. The file uses `compute_graduation` which calls `score_keywords_bayesian`. Let's mock score_keywords_bayesian.
+
+    import unittest.mock as mock
+    with mock.patch('app.services.keyword_graduation.score_keywords_bayesian') as mock_score:
+        mock_score.return_value = [
+            {"keyword_text": "rufus pass", "query_source": "rufus", "orders": 5, "prob_acos_below_target": 0.55, "campaign_id": "c1"},
+            {"keyword_text": "rufus fail prob", "query_source": "rufus", "orders": 5, "prob_acos_below_target": 0.45, "campaign_id": "c1"},
+            {"keyword_text": "rufus fail orders", "query_source": "rufus", "orders": 4, "prob_acos_below_target": 0.60, "campaign_id": "c1"},
+            {"keyword_text": "organic pass", "query_source": "organic", "orders": 3, "prob_acos_below_target": 0.65, "campaign_id": "c1"},
+            {"keyword_text": "organic fail prob", "query_source": "organic", "orders": 3, "prob_acos_below_target": 0.55, "campaign_id": "c1"},
+        ]
+        
+        result = compute_graduation([], target_acos=25.0, min_orders_to_graduate=3, prob_acos_threshold_graduate=0.60)
+        
+        graduates = [r["keyword_text"] for r in result["to_graduate"]]
+        assert "rufus pass" in graduates
+        assert "rufus fail prob" not in graduates
+        assert "rufus fail orders" not in graduates
+        assert "organic pass" in graduates
+        assert "organic fail prob" not in graduates
+

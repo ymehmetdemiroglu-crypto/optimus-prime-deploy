@@ -30,20 +30,31 @@ def compute_graduation(
         keyword_text = s.get("keyword_text", "")
         campaign_id = s.get("campaign_id", "")
         campaign_name = s.get("campaign_name", "")
+        query_source = s.get("query_source", "organic")
         orders = s.get("orders", 0)
         clicks = s.get("clicks", 0)
         spend = s.get("spend", 0.0)
         sales = s.get("sales", 0.0)
         prob_below = s.get("prob_acos_below_target", 0.0)
         observed_acos = (spend / sales) if sales and sales > 0 else 1.0
+        
+        # Adaptive thresholds depending on intent source
+        if query_source == "rufus":
+            # Rufus converts deeper in the funnel; requires higher proof of volume
+            effective_min_orders = 5
+            effective_prob_threshold = 0.50
+        else:
+            effective_min_orders = min_orders_to_graduate
+            effective_prob_threshold = prob_acos_threshold_graduate
+            
         # Graduate: enough orders and Bayesian P(ACoS < target) >= threshold
-        if orders >= min_orders_to_graduate and prob_below >= prob_acos_threshold_graduate:
+        if orders >= effective_min_orders and prob_below >= effective_prob_threshold:
             to_graduate.append({
                 "keyword_text": keyword_text,
                 "campaign_id": campaign_id,
                 "campaign_name": campaign_name,
                 "suggested_match_type": "exact",
-                "reason": f"Orders={orders}, P(ACoS<target)={prob_below:.2f}; ready for exact match.",
+                "reason": f"Orders={orders}, P(ACoS<target)={prob_below:.2f} (source: {query_source}); ready for exact match.",
             })
         # Negate: many clicks and zero orders, or observed ACoS above ceiling with enough spend
         if clicks >= min_clicks_to_negate and orders == 0:

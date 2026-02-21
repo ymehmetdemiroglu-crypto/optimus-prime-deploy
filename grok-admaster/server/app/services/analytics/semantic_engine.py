@@ -14,10 +14,12 @@ from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.embeddings import embedding_service
+import numpy as np
 from app.models.semantic import (
     SearchTermEmbedding, ProductEmbedding,
     SemanticBleedLog, SemanticOpportunityLog
 )
+from app.modules.amazon_ppc.ml.search_term_analysis import SearchTermAnalyzer
 
 logger = logging.getLogger("semantic_engine")
 
@@ -87,6 +89,7 @@ class SemanticIngestor:
         terms = [row.search_term for row in rows]
         logger.info(f"Generating embeddings for {len(terms)} search terms...")
         embeddings = embedding_service.embed_batch(terms)
+        analyzer = SearchTermAnalyzer()
         
         # Insert into search_term_embeddings
         objects = []
@@ -94,6 +97,8 @@ class SemanticIngestor:
             obj = SearchTermEmbedding(
                 term=row.search_term,
                 embedding=emb,
+                # Use the new intent classifier to set query_source
+                query_source=analyzer._classify_intent(row.search_term),
                 account_id=account_id,
                 campaign_id=row.campaign_id,
                 impressions=row.total_impressions or 0,
@@ -116,17 +121,56 @@ class SemanticIngestor:
         asin: str,
         title: str,
         bullet_points: Optional[List[str]] = None,
-        account_id: Optional[int] = None
+        account_id: Optional[int] = None,
+        backend_search_terms: Optional[str] = None,
+        a_plus_content_text: Optional[str] = None,
+        reviews: Optional[List[str]] = None,
+        qa: Optional[List[str]] = None
     ) -> ProductEmbedding:
         """
         Generate and store the semantic identity of a product.
-        The source text is the title + bullet points concatenated.
+        Generates both core embedding and weighted cosmo embedding.
         """
         source_text = title
         if bullet_points:
             source_text += " " + " ".join(bullet_points)
         
         embedding = embedding_service.embed_text(source_text)
+        
+        def normalize_vector(v):
+            norm = np.linalg.norm(v)
+            return v / norm if norm > 0 else v
+            
+        # 2. Rich Cosmo Embedding using e5-large-v2 (intent model)
+        core_text_for_intent = source_text
+        if backend_search_terms:
+            core_text_for_intent += " " + backend_search_terms
+        if a_plus_content_text:
+            core_text_for_intent += " " + a_plus_content_text
+            
+        core_intent_emb = normalize_vector(np.array(embedding_service.encode_intent(core_text_for_intent, is_query=False)))
+        
+        review_centroid = np.zeros_like(core_intent_emb)
+        if reviews and len(reviews) > 0:
+            review_embs = embedding_service.encode_batch_intent(reviews, is_query=False)
+            review_centroid = normalize_vector(np.mean(review_embs, axis=0))
+            
+        qa_centroid = np.zeros_like(core_intent_emb)
+        if qa and len(qa) > 0:
+            qa_embs = embedding_service.encode_batch_intent(qa, is_query=False)
+            qa_centroid = normalize_vector(np.mean(qa_embs, axis=0))
+            
+        # Linearly weight them to prevent signal dilution
+        w_core, w_review, w_qa = 1.0, 0.0, 0.0
+        if reviews and qa:
+            w_core, w_review, w_qa = 0.60, 0.25, 0.15
+        elif reviews:
+            w_core, w_review, w_qa = 0.70, 0.30, 0.0
+        elif qa:
+            w_core, w_review, w_qa = 0.80, 0.0, 0.20
+            
+        cosmo_emb = normalize_vector((core_intent_emb * w_core) + (review_centroid * w_review) + (qa_centroid * w_qa))
+        cosmo_embedding_list = cosmo_emb.tolist()
         
         # Upsert: update if exists, insert if not
         existing = await self.db.execute(
@@ -141,6 +185,7 @@ class SemanticIngestor:
             existing_row.title = title
             existing_row.source_text = source_text
             existing_row.embedding = embedding
+            existing_row.cosmo_embedding = cosmo_embedding_list
             existing_row.updated_at = datetime.now(timezone.utc)
             await self.db.commit()
             logger.info(f"Updated product embedding for {asin}")
@@ -151,6 +196,7 @@ class SemanticIngestor:
                 title=title,
                 source_text=source_text,
                 embedding=embedding,
+                cosmo_embedding=cosmo_embedding_list,
                 account_id=account_id
             )
             self.db.add(product_emb)
@@ -207,7 +253,12 @@ class BleedDetector:
               AND pe.account_id = :account_id
               AND ste.account_id = :account_id
               AND ste.spend >= :min_spend
-              AND (1 - (ste.embedding <=> pe.embedding)) < :threshold
+              AND (1 - (ste.embedding <=> pe.embedding)) < CASE 
+                  WHEN ste.query_source = 'transactional' THEN 0.35
+                  WHEN ste.query_source = 'informational_rufus' THEN 0.20
+                  WHEN ste.query_source = 'discovery' THEN 0.15
+                  ELSE :threshold 
+              END
             ORDER BY ste.spend DESC
             LIMIT :limit
         """)
@@ -310,8 +361,13 @@ class OpportunityFinder:
             WHERE pe.asin = :asin
               AND pe.account_id = :account_id
               AND ste.account_id = :account_id
-              AND (1 - (ste.embedding <=> pe.embedding)) >= :sim_floor
               AND ste.orders >= :min_orders
+              AND (1 - (ste.embedding <=> pe.embedding)) >= CASE 
+                  WHEN ste.query_source = 'transactional' THEN 0.75
+                  WHEN ste.query_source = 'informational_rufus' THEN 0.50
+                  WHEN ste.query_source = 'discovery' THEN 0.45
+                  ELSE :sim_floor 
+              END
             ORDER BY similarity DESC, ste.sales DESC
             LIMIT :limit
         """)

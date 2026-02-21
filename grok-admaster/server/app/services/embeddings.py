@@ -24,6 +24,10 @@ class EmbeddingService:
     MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
     EMBEDDING_DIM = 384
     
+    INTENT_MODEL_NAME = "intfloat/e5-large-v2"
+    _intent_model = None
+    INTENT_EMBEDDING_DIM = 1024
+    
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -47,6 +51,27 @@ class EmbeddingService:
                 logger.error(f"Failed to load embedding model: {e}")
                 raise
     
+    def _load_intent_model(self):
+        """Lazy-load the large intent model in float16 for memory safety."""
+        if self._intent_model is None:
+            logger.info(f"Loading intent embedding model: {self.INTENT_MODEL_NAME} (float16) ...")
+            try:
+                from sentence_transformers import SentenceTransformer
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                self._intent_model = SentenceTransformer(
+                    self.INTENT_MODEL_NAME,
+                    model_kwargs={"torch_dtype": torch.float16},
+                    device=device
+                )
+                logger.info(f"Intent model loaded successfully ({self.INTENT_EMBEDDING_DIM} dimensions)")
+            except ImportError:
+                logger.error("sentence-transformers not installed.")
+                raise
+            except Exception as e:
+                logger.error(f"Failed to load intent embedding model: {e}")
+                raise
+
     def embed_text(self, text: str) -> List[float]:
         """
         Generate embedding for a single text string.
@@ -83,6 +108,30 @@ class EmbeddingService:
             batch_size=batch_size,
             normalize_embeddings=True,
             show_progress_bar=len(texts) > 100
+        )
+        )
+        return embeddings.tolist()
+    
+    def encode_intent(self, text: str, is_query: bool = True) -> List[float]:
+        """Generate e-commerce intent embedding using the large model."""
+        self._load_intent_model()
+        prefix = "query: " if is_query else "passage: "
+        embedding = self._intent_model.encode(prefix + text, normalize_embeddings=True)
+        return embedding.tolist()
+
+    def encode_batch_intent(self, texts: List[str], is_query: bool = True, batch_size: int = 16) -> List[List[float]]:
+        """Generate high-quality intent embeddings for a batch of texts."""
+        self._load_intent_model()
+        if not texts:
+            return []
+        prefix = "query: " if is_query else "passage: "
+        prefixed_texts = [prefix + t for t in texts]
+        logger.info(f"Intent embedding batch of {len(texts)} texts (batch_size={batch_size})")
+        embeddings = self._intent_model.encode(
+            prefixed_texts,
+            batch_size=batch_size,
+            normalize_embeddings=True,
+            show_progress_bar=len(texts) > 50
         )
         return embeddings.tolist()
     

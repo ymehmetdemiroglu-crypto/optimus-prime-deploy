@@ -254,6 +254,25 @@ class SearchTermAnalyzer:
         
         return dict(ngram_stats)
     
+    def _classify_intent(self, term: str) -> str:
+        """Classify search term intent using heuristic patterns."""
+        term_lower = term.lower()
+        
+        # Informational / Rufus / Research
+        if any(q in term_lower for q in ['how', 'what', 'where', 'why', 'which', 'best', 'compare', 'vs', 'difference']):
+            return 'informational_rufus'
+            
+        # Navigational / Brand
+        if any(b in term_lower for b in ['official', 'brand', 'authentic', 'genuine']):
+            return 'navigational'
+            
+        # Transactional
+        if any(t in term_lower for t in ['buy', 'cheap', 'price', 'sale', 'discount', 'size', 'color']):
+            return 'transactional'
+            
+        # Default to discovery
+        return 'discovery'
+
     def _categorize_terms(
         self,
         data: List[Dict[str, Any]],
@@ -281,7 +300,8 @@ class SearchTermAnalyzer:
                 'spend': round(spend, 2),
                 'sales': round(sales, 2),
                 'clicks': clicks,
-                'acos': round(acos, 2) if acos != float('inf') else None
+                'acos': round(acos, 2) if acos != float('inf') else None,
+                'intent': self._classify_intent(term)
             }
             
             if sales > 0 and acos < target_acos:

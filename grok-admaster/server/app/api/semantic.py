@@ -31,6 +31,10 @@ class EmbedProductRequest(BaseModel):
     title: str
     bullet_points: Optional[List[str]] = None
     account_id: Optional[int] = None
+    backend_search_terms: Optional[str] = None
+    a_plus_content_text: Optional[str] = None
+    reviews: Optional[List[str]] = None
+    qa: Optional[List[str]] = None
 
 class BleedRequest(BaseModel):
     asin: str
@@ -83,7 +87,11 @@ async def embed_product(request: EmbedProductRequest, db: AsyncSession = Depends
         asin=request.asin,
         title=request.title,
         bullet_points=request.bullet_points,
-        account_id=request.account_id
+        account_id=request.account_id,
+        backend_search_terms=request.backend_search_terms,
+        a_plus_content_text=request.a_plus_content_text,
+        reviews=request.reviews,
+        qa=request.qa
     )
     return {
         "status": "embedded",
