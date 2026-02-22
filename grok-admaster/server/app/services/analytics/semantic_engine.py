@@ -24,6 +24,7 @@ from app.services.ml.intent_classifier import (
 from app.services.ml.rich_product_embeddings import (
     get_rich_embedding_builder, ProductMetadata, EMBEDDING_VERSION_RICH
 )
+from app.services.ml.vector_search import VectorSearchService, SearchMode
 
 logger = logging.getLogger("semantic_engine")
 
@@ -240,6 +241,11 @@ class BleedDetector:
         """
         Find search terms that are wasting budget.
 
+        Uses a 2-step HNSW-accelerated pattern:
+          1. Fetch the product embedding vector
+          2. KNN scan for farthest terms (ORDER BY <=> DESC)
+          3. Post-filter by similarity threshold + intent
+
         When intent_aware=True, each result is re-evaluated against
         intent-specific thresholds so Rufus/discovery traffic isn't
         incorrectly flagged as bleed.
@@ -255,88 +261,78 @@ class BleedDetector:
         Returns:
             List of bleed candidates with term, similarity, spend, etc.
         """
-        # Use the most lenient threshold for the SQL query to cast a wide net;
-        # intent-specific filtering happens post-query.
-        sql_threshold = similarity_threshold
-        if intent_aware:
-            sql_threshold = max(
-                similarity_threshold,
-                max(t["bleed_threshold"] for t in get_intent_thresholds.__func__.__defaults__ or [similarity_threshold])  # type: ignore[union-attr]
-            ) if False else similarity_threshold  # keep original for SQL; filter below
+        vs = VectorSearchService(self.db)
 
-        query = text("""
-            SELECT
-                ste.id as embedding_id,
-                ste.term,
-                ROUND((1 - (ste.embedding <=> pe.embedding))::NUMERIC, 4) AS similarity,
-                ste.spend,
-                ste.clicks,
-                ste.impressions,
-                ste.acos,
-                ste.intent_type,
-                pe.id as product_embedding_id,
-                pe.embedding_version,
-                pe.cosmo_alignment_score
-            FROM search_term_embeddings ste
-            CROSS JOIN product_embeddings pe
-            WHERE pe.asin = :asin
-              AND pe.account_id = :account_id
-              AND ste.account_id = :account_id
-              AND ste.spend >= :min_spend
-              AND (1 - (ste.embedding <=> pe.embedding)) < :threshold
-            ORDER BY ste.spend DESC
-            LIMIT :limit
-        """)
+        # Step 1: fetch product vector + metadata
+        product = await vs.get_product_vector(asin, account_id)
+        if product is None:
+            logger.warning(f"No product embedding found for {asin} (account={account_id})")
+            return []
 
-        result = await self.db.execute(query, {
-            "asin": asin,
-            "account_id": account_id,
-            "threshold": similarity_threshold,
-            "min_spend": min_spend,
-            "limit": limit
-        })
-        rows = result.fetchall()
+        product_vec = product["embedding"]
+        product_embedding_id = str(product["product_embedding_id"])
+        embedding_version = product.get("embedding_version")
+        cosmo_score = product.get("cosmo_alignment_score")
 
+        # Step 2: KNN scan — fetch more candidates than limit for post-filtering
+        candidate_limit = max(limit * 4, 200)
+        candidates = await vs.find_farthest(
+            reference_vector=product_vec,
+            account_id=account_id,
+            k=candidate_limit,
+            mode=SearchMode.BLEED,
+            min_spend=min_spend,
+        )
+
+        # Step 3: post-filter by similarity threshold + intent
         classifier = get_intent_classifier() if intent_aware else None
 
         bleed_items = []
-        for row in rows:
-            sim = float(row.similarity)
-            intent_str = getattr(row, "intent_type", None) or "unclassified"
+        for row in candidates:
+            sim = float(row["similarity"])
+            intent_str = row.get("intent_type") or "unclassified"
 
-            # Intent-aware filtering: reclassify if needed, then check threshold
+            # Basic threshold check
+            if sim >= similarity_threshold:
+                continue
+
+            # Intent-aware filtering
             if intent_aware and classifier:
                 if intent_str == "unclassified":
-                    intent_result = classifier.classify(row.term)
+                    intent_result = classifier.classify(row["term"])
                     intent_str = intent_result.intent.value
                 try:
                     intent_enum = ShoppingIntent(intent_str)
                 except ValueError:
                     intent_enum = ShoppingIntent.TRANSACTIONAL
                 intent_thresh = get_intent_thresholds(intent_enum)["bleed_threshold"]
-                # If similarity is above the intent-adjusted threshold, it's NOT bleed
                 if sim >= intent_thresh:
                     continue
 
             bleed_items.append({
-                "embedding_id": str(row.embedding_id),
-                "product_embedding_id": str(row.product_embedding_id),
-                "term": row.term,
+                "embedding_id": str(row["embedding_id"]),
+                "product_embedding_id": product_embedding_id,
+                "term": row["term"],
                 "semantic_similarity": sim,
-                "spend": float(row.spend),
-                "clicks": row.clicks,
-                "impressions": row.impressions,
-                "acos": float(row.acos) if row.acos else None,
+                "spend": float(row["spend"]),
+                "clicks": row["clicks"],
+                "impressions": row["impressions"],
+                "acos": float(row["acos"]) if row.get("acos") else None,
                 "intent_type": intent_str,
-                "embedding_version": getattr(row, "embedding_version", None),
-                "cosmo_alignment_score": float(row.cosmo_alignment_score) if getattr(row, "cosmo_alignment_score", None) else None,
+                "embedding_version": embedding_version,
+                "cosmo_alignment_score": float(cosmo_score) if cosmo_score else None,
+                "hnsw_accelerated": True,
                 "recommendation": "ADD_NEGATIVE",
-                "urgency": "HIGH" if float(row.spend) > 10 else "MEDIUM"
+                "urgency": "HIGH" if float(row["spend"]) > 10 else "MEDIUM",
             })
+
+            if len(bleed_items) >= limit:
+                break
 
         logger.info(
             f"Bleed scan for {asin}: found {len(bleed_items)} bleeding terms "
-            f"(threshold={similarity_threshold}, intent_aware={intent_aware}, min_spend=${min_spend})"
+            f"(threshold={similarity_threshold}, intent_aware={intent_aware}, "
+            f"min_spend=${min_spend}, hnsw=true)"
         )
         return bleed_items
     
@@ -385,6 +381,11 @@ class OpportunityFinder:
         """
         Find high-value semantic clusters you're missing.
 
+        Uses a 2-step HNSW-accelerated pattern:
+          1. Fetch the product embedding vector
+          2. KNN scan for nearest terms (ORDER BY <=> ASC)
+          3. Post-filter by similarity floor + intent
+
         When intent_aware=True, Rufus/discovery terms are included at a
         lower similarity floor since conversational queries naturally
         have lower cosine similarity to product embeddings.
@@ -400,58 +401,53 @@ class OpportunityFinder:
         Returns:
             List of opportunity candidates.
         """
-        # Use the lowest intent-aware floor in SQL to capture more candidates
-        sql_floor = similarity_floor
+        vs = VectorSearchService(self.db)
+
+        # Step 1: fetch product vector + metadata
+        product = await vs.get_product_vector(asin, account_id)
+        if product is None:
+            logger.warning(f"No product embedding found for {asin} (account={account_id})")
+            return []
+
+        product_vec = product["embedding"]
+        embedding_version = product.get("embedding_version")
+        cosmo_score = product.get("cosmo_alignment_score")
+
+        # Step 2: KNN scan — nearest first (HNSW-accelerated)
+        candidate_limit = max(limit * 4, 200)
+        candidates = await vs.find_nearest(
+            reference_vector=product_vec,
+            account_id=account_id,
+            k=candidate_limit,
+            mode=SearchMode.OPPORTUNITY,
+            min_orders=min_orders,
+        )
+
+        # Step 3: post-filter by similarity floor + intent
+        # Determine the effective floor (may be lowered for intent-aware mode)
+        effective_floor = similarity_floor
         if intent_aware:
             lowest_floor = min(
                 t["opportunity_floor"]
                 for t in [get_intent_thresholds(i) for i in ShoppingIntent]
             )
-            sql_floor = min(similarity_floor, lowest_floor)
-
-        query = text("""
-            SELECT
-                ste.term,
-                ROUND((1 - (ste.embedding <=> pe.embedding))::NUMERIC, 4) AS similarity,
-                ste.impressions,
-                ste.clicks,
-                ste.sales,
-                ste.orders,
-                ste.acos,
-                ste.intent_type,
-                pe.embedding_version,
-                pe.cosmo_alignment_score
-            FROM search_term_embeddings ste
-            CROSS JOIN product_embeddings pe
-            WHERE pe.asin = :asin
-              AND pe.account_id = :account_id
-              AND ste.account_id = :account_id
-              AND (1 - (ste.embedding <=> pe.embedding)) >= :sim_floor
-              AND ste.orders >= :min_orders
-            ORDER BY similarity DESC, ste.sales DESC
-            LIMIT :limit
-        """)
-
-        result = await self.db.execute(query, {
-            "asin": asin,
-            "account_id": account_id,
-            "sim_floor": sql_floor,
-            "min_orders": min_orders,
-            "limit": limit
-        })
-        rows = result.fetchall()
+            effective_floor = min(similarity_floor, lowest_floor)
 
         classifier = get_intent_classifier() if intent_aware else None
 
         opportunities = []
-        for row in rows:
-            sim = float(row.similarity)
-            intent_str = getattr(row, "intent_type", None) or "unclassified"
+        for row in candidates:
+            sim = float(row["similarity"])
+            intent_str = row.get("intent_type") or "unclassified"
+
+            # Basic floor check
+            if sim < effective_floor:
+                continue
 
             # Intent-aware floor check
             if intent_aware and classifier:
                 if intent_str == "unclassified":
-                    intent_result = classifier.classify(row.term)
+                    intent_result = classifier.classify(row["term"])
                     intent_str = intent_result.intent.value
                 try:
                     intent_enum = ShoppingIntent(intent_str)
@@ -462,28 +458,33 @@ class OpportunityFinder:
                     continue
 
             suggested_bid = self._calculate_suggested_bid(
-                float(row.sales or 0), row.clicks or 1, float(row.acos or 30)
+                float(row["sales"] or 0), row["clicks"] or 1, float(row["acos"] or 30)
             )
             opportunities.append({
-                "term": row.term,
+                "term": row["term"],
                 "semantic_similarity": sim,
-                "impressions": row.impressions,
-                "clicks": row.clicks,
-                "sales": float(row.sales) if row.sales else 0,
-                "orders": row.orders,
-                "acos": float(row.acos) if row.acos else None,
+                "impressions": row["impressions"],
+                "clicks": row["clicks"],
+                "sales": float(row["sales"]) if row.get("sales") else 0,
+                "orders": row["orders"],
+                "acos": float(row["acos"]) if row.get("acos") else None,
                 "intent_type": intent_str,
-                "embedding_version": getattr(row, "embedding_version", None),
-                "cosmo_alignment_score": float(row.cosmo_alignment_score) if getattr(row, "cosmo_alignment_score", None) else None,
+                "embedding_version": embedding_version,
+                "cosmo_alignment_score": float(cosmo_score) if cosmo_score else None,
+                "hnsw_accelerated": True,
                 "suggested_match_type": "exact" if sim > 0.85 else "phrase",
                 "suggested_bid": suggested_bid,
                 "recommendation": "ADD_AS_TARGET",
-                "confidence": "HIGH" if sim > 0.85 and row.orders >= 3 else "MEDIUM"
+                "confidence": "HIGH" if sim > 0.85 and row["orders"] >= 3 else "MEDIUM",
             })
+
+            if len(opportunities) >= limit:
+                break
 
         logger.info(
             f"Opportunity scan for {asin}: found {len(opportunities)} targets "
-            f"(floor={sql_floor}, intent_aware={intent_aware}, min_orders={min_orders})"
+            f"(floor={effective_floor}, intent_aware={intent_aware}, "
+            f"min_orders={min_orders}, hnsw=true)"
         )
         return opportunities
     

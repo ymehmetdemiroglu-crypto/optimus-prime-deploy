@@ -143,6 +143,7 @@ async def detect_bleed(request: BleedRequest, db: AsyncSession = Depends(get_db)
         "bleed_count": len(results),
         "total_wasted_spend": round(total_waste, 2),
         "intent_aware": request.intent_aware,
+        "hnsw_accelerated": True,
         "results": results
     }
 
@@ -166,6 +167,7 @@ async def find_opportunities(request: OpportunityRequest, db: AsyncSession = Dep
         "opportunity_count": len(results),
         "total_revenue_potential": round(total_potential, 2),
         "intent_aware": request.intent_aware,
+        "hnsw_accelerated": True,
         "results": results
     }
 
