@@ -35,13 +35,25 @@ class SearchTermEmbedding(Base):
 
 class ProductEmbedding(Base):
     __tablename__ = "product_embeddings"
-    
+
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     asin = Column(String(20), nullable=False)
     title = Column(Text)
     source_text = Column(Text)
     embedding = Column(Vector(384))
     account_id = Column(Integer, ForeignKey("accounts.id"))
+    # --- Rich Product Metadata (Cosmo Alignment) ---
+    brand = Column(String(255))
+    category_path = Column(Text)                       # "Home & Kitchen > Kitchen > Coffee"
+    product_type = Column(String(100))                 # Amazon product type / browse node label
+    bullet_points = Column(JSON)                       # preserved as list for downstream use
+    attributes = Column(JSON)                          # {"size": "12oz", "material": "stainless steel", ...}
+    price = Column(Numeric(10, 2))
+    review_score = Column(Numeric(3, 2))               # 1.00 – 5.00
+    review_count = Column(Integer, default=0)
+    parent_asin = Column(String(20))                   # variation parent ASIN
+    embedding_version = Column(String(30), default="v1_title_only")  # tracks which enrichment produced the vector
+    cosmo_alignment_score = Column(Numeric(6, 4))      # self-computed alignment confidence
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

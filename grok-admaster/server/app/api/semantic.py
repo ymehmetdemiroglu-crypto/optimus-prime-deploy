@@ -32,6 +32,15 @@ class EmbedProductRequest(BaseModel):
     title: str
     bullet_points: Optional[List[str]] = None
     account_id: Optional[int] = None
+    # Rich metadata for Cosmo alignment (all optional for backward compat)
+    brand: Optional[str] = None
+    category_path: Optional[str] = None        # "Home & Kitchen > Kitchen > Coffee"
+    product_type: Optional[str] = None         # Amazon product type / browse node label
+    attributes: Optional[Dict[str, str]] = None
+    price: Optional[float] = None
+    review_score: Optional[float] = None       # 1.0 – 5.0
+    review_count: Optional[int] = None
+    parent_asin: Optional[str] = None
 
 class BleedRequest(BaseModel):
     asin: str
@@ -83,18 +92,35 @@ async def ingest_search_terms(request: IngestRequest, db: AsyncSession = Depends
 
 @router.post("/embed-product")
 async def embed_product(request: EmbedProductRequest, db: AsyncSession = Depends(get_db)):
-    """Generate and store embedding for a product."""
+    """
+    Generate and store embedding for a product.
+
+    When rich metadata (brand, category_path, attributes …) is provided,
+    the embedding uses a Cosmo-aligned structured source text for better
+    query–product semantic matching.  A cosmo_alignment_score (0–1) is
+    returned indicating how much product signal was captured.
+    """
     ingestor = SemanticIngestor(db)
     product = await ingestor.embed_product(
         asin=request.asin,
         title=request.title,
         bullet_points=request.bullet_points,
-        account_id=request.account_id
+        account_id=request.account_id,
+        brand=request.brand,
+        category_path=request.category_path,
+        product_type=request.product_type,
+        attributes=request.attributes,
+        price=request.price,
+        review_score=request.review_score,
+        review_count=request.review_count,
+        parent_asin=request.parent_asin,
     )
     return {
         "status": "embedded",
         "asin": request.asin,
-        "embedding_id": str(product.id)
+        "embedding_id": str(product.id),
+        "embedding_version": product.embedding_version,
+        "cosmo_alignment_score": float(product.cosmo_alignment_score) if product.cosmo_alignment_score else 0.0,
     }
 
 

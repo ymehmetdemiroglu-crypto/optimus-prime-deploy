@@ -21,6 +21,9 @@ from app.models.semantic import (
 from app.services.ml.intent_classifier import (
     get_intent_classifier, get_intent_thresholds, ShoppingIntent
 )
+from app.services.ml.rich_product_embeddings import (
+    get_rich_embedding_builder, ProductMetadata, EMBEDDING_VERSION_RICH
+)
 
 logger = logging.getLogger("semantic_engine")
 
@@ -125,18 +128,44 @@ class SemanticIngestor:
         asin: str,
         title: str,
         bullet_points: Optional[List[str]] = None,
-        account_id: Optional[int] = None
+        account_id: Optional[int] = None,
+        *,
+        brand: Optional[str] = None,
+        category_path: Optional[str] = None,
+        product_type: Optional[str] = None,
+        attributes: Optional[Dict[str, str]] = None,
+        price: Optional[float] = None,
+        review_score: Optional[float] = None,
+        review_count: Optional[int] = None,
+        parent_asin: Optional[str] = None,
     ) -> ProductEmbedding:
         """
         Generate and store the semantic identity of a product.
-        The source text is the title + bullet points concatenated.
+
+        When rich metadata (brand, category, attributes …) is supplied the
+        RichProductEmbeddingBuilder produces a structured source text that
+        mirrors the signals Amazon Cosmo uses for query–product ranking.
+        A cosmo_alignment_score (0–1) is stored alongside the vector to
+        quantify embedding quality.
         """
-        source_text = title
-        if bullet_points:
-            source_text += " " + " ".join(bullet_points)
-        
-        embedding = embedding_service.embed_text(source_text)
-        
+        # Build structured source text via the Cosmo-alignment builder
+        builder = get_rich_embedding_builder()
+        meta = builder.build(ProductMetadata(
+            asin=asin,
+            title=title,
+            bullet_points=bullet_points,
+            brand=brand,
+            category_path=category_path,
+            product_type=product_type,
+            attributes=attributes,
+            price=price,
+            review_score=review_score,
+            review_count=review_count,
+            parent_asin=parent_asin,
+        ))
+
+        embedding = embedding_service.embed_text(meta.source_text)
+
         # Upsert: update if exists, insert if not
         existing = await self.db.execute(
             select(ProductEmbedding).where(
@@ -145,26 +174,46 @@ class SemanticIngestor:
             )
         )
         existing_row = existing.scalars().first()
-        
+
+        field_values = dict(
+            title=title,
+            source_text=meta.source_text,
+            embedding=embedding,
+            brand=brand,
+            category_path=category_path,
+            product_type=product_type,
+            bullet_points=bullet_points,
+            attributes=attributes,
+            price=Decimal(str(price)) if price is not None else None,
+            review_score=Decimal(str(review_score)) if review_score is not None else None,
+            review_count=review_count,
+            parent_asin=parent_asin,
+            embedding_version=meta.embedding_version,
+            cosmo_alignment_score=Decimal(str(meta.cosmo_alignment_score)),
+        )
+
         if existing_row:
-            existing_row.title = title
-            existing_row.source_text = source_text
-            existing_row.embedding = embedding
+            for k, v in field_values.items():
+                setattr(existing_row, k, v)
             existing_row.updated_at = datetime.now(timezone.utc)
             await self.db.commit()
-            logger.info(f"Updated product embedding for {asin}")
+            logger.info(
+                f"Updated product embedding for {asin} "
+                f"(version={meta.embedding_version}, alignment={meta.cosmo_alignment_score})"
+            )
             return existing_row
         else:
             product_emb = ProductEmbedding(
                 asin=asin,
-                title=title,
-                source_text=source_text,
-                embedding=embedding,
-                account_id=account_id
+                account_id=account_id,
+                **field_values,
             )
             self.db.add(product_emb)
             await self.db.commit()
-            logger.info(f"Created product embedding for {asin}")
+            logger.info(
+                f"Created product embedding for {asin} "
+                f"(version={meta.embedding_version}, alignment={meta.cosmo_alignment_score})"
+            )
             return product_emb
 
 
@@ -225,7 +274,9 @@ class BleedDetector:
                 ste.impressions,
                 ste.acos,
                 ste.intent_type,
-                pe.id as product_embedding_id
+                pe.id as product_embedding_id,
+                pe.embedding_version,
+                pe.cosmo_alignment_score
             FROM search_term_embeddings ste
             CROSS JOIN product_embeddings pe
             WHERE pe.asin = :asin
@@ -277,6 +328,8 @@ class BleedDetector:
                 "impressions": row.impressions,
                 "acos": float(row.acos) if row.acos else None,
                 "intent_type": intent_str,
+                "embedding_version": getattr(row, "embedding_version", None),
+                "cosmo_alignment_score": float(row.cosmo_alignment_score) if getattr(row, "cosmo_alignment_score", None) else None,
                 "recommendation": "ADD_NEGATIVE",
                 "urgency": "HIGH" if float(row.spend) > 10 else "MEDIUM"
             })
@@ -365,7 +418,9 @@ class OpportunityFinder:
                 ste.sales,
                 ste.orders,
                 ste.acos,
-                ste.intent_type
+                ste.intent_type,
+                pe.embedding_version,
+                pe.cosmo_alignment_score
             FROM search_term_embeddings ste
             CROSS JOIN product_embeddings pe
             WHERE pe.asin = :asin
@@ -418,6 +473,8 @@ class OpportunityFinder:
                 "orders": row.orders,
                 "acos": float(row.acos) if row.acos else None,
                 "intent_type": intent_str,
+                "embedding_version": getattr(row, "embedding_version", None),
+                "cosmo_alignment_score": float(row.cosmo_alignment_score) if getattr(row, "cosmo_alignment_score", None) else None,
                 "suggested_match_type": "exact" if sim > 0.85 else "phrase",
                 "suggested_bid": suggested_bid,
                 "recommendation": "ADD_AS_TARGET",
