@@ -178,28 +178,38 @@ class ContextualBandit:
         return np.array(context)
     
     def select_arm(self, features: Dict[str, Any]) -> Tuple[int, float]:
-        """Select arm based on context using LinUCB."""
+        """Select arm based on context using LinUCB.
+
+        Uses np.linalg.solve() instead of np.linalg.inv() to avoid
+        explicit matrix inversion — more numerically stable and faster.
+        For confidence bound we solve A @ v = context so v = A^{-1} context,
+        giving context^T A^{-1} context = context @ v without forming A^{-1}.
+        """
         context = self._get_context(features)
-        
+
         best_arm = 0
         best_ucb = -float('inf')
-        
+
         for arm_id in range(len(self.arm_multipliers)):
-            A_inv = np.linalg.inv(self.arm_A[arm_id])
-            theta = A_inv @ self.arm_b[arm_id]
-            
+            A = self.arm_A[arm_id]
+
+            # theta = A^{-1} b  →  solve A @ theta = b
+            theta = np.linalg.solve(A, self.arm_b[arm_id])
+
             # Expected reward
             expected = context @ theta
-            
-            # Confidence bound
-            confidence = np.sqrt(context @ A_inv @ context)
-            
+
+            # Confidence: sqrt(context^T A^{-1} context)
+            # Solve A @ v = context  →  v = A^{-1} context
+            v = np.linalg.solve(A, context)
+            confidence = np.sqrt(np.maximum(context @ v, 0.0))
+
             ucb = expected + confidence
-            
+
             if ucb > best_ucb:
                 best_ucb = ucb
                 best_arm = arm_id
-        
+
         return best_arm, self.arm_multipliers[best_arm]
     
     def update(self, arm_id: int, features: Dict[str, Any], reward: float):

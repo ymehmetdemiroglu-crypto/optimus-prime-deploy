@@ -29,46 +29,67 @@ class GaussianProcessRegressor:
     """
     Simple Gaussian Process regressor for Bayesian optimization.
     Uses RBF (Radial Basis Function) kernel.
+
+    Stores the Cholesky factor L of the kernel matrix K = L L^T instead
+    of K^{-1}.  This gives O(n²) predictions vs O(n²) for inv-based
+    approach but avoids the O(n³) inversion and is significantly more
+    numerically stable when noise is small or the kernel matrix is
+    near-singular (common with clustered budget observations).
     """
-    
+
     def __init__(self, length_scale: float = 1.0, noise: float = 0.1):
         self.length_scale = length_scale
         self.noise = noise
         self.X_train = None
         self.y_train = None
-        self.K_inv = None
-    
+        self._L = None      # Cholesky factor of K
+        self._alpha = None  # K^{-1} y  (solved via L, not via inv)
+
     def _rbf_kernel(self, X1: np.ndarray, X2: np.ndarray) -> np.ndarray:
         """RBF (Gaussian) kernel."""
         sqdist = np.sum(X1**2, axis=1).reshape(-1, 1) + \
                  np.sum(X2**2, axis=1) - 2 * X1 @ X2.T
         return np.exp(-0.5 / self.length_scale**2 * sqdist)
-    
+
     def fit(self, X: np.ndarray, y: np.ndarray):
-        """Fit the GP to training data."""
+        """Fit the GP to training data using Cholesky decomposition."""
         self.X_train = X
         self.y_train = y
-        
+
         K = self._rbf_kernel(X, X) + self.noise**2 * np.eye(len(X))
-        self.K_inv = np.linalg.inv(K)
-    
+        try:
+            self._L = np.linalg.cholesky(K)
+        except np.linalg.LinAlgError:
+            # Add jitter for near-singular matrices (very common with ad data)
+            K += 1e-6 * np.eye(len(X))
+            self._L = np.linalg.cholesky(K)
+
+        # alpha = K^{-1} y  →  solve L L^T alpha = y via two triangular solves
+        from scipy.linalg import solve_triangular
+        v = solve_triangular(self._L, y, lower=True)
+        self._alpha = solve_triangular(self._L, v, trans='T', lower=True)
+
     def predict(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Predict mean and standard deviation at test points.
+
+        Mean:     K_trans @ alpha                       (no K^{-1} needed)
+        Variance: diag(K_ss) - ||L^{-1} K_trans^T||²   (Cholesky solve)
         """
         if self.X_train is None:
             return np.zeros(len(X)), np.ones(len(X))
-        
+
+        from scipy.linalg import solve_triangular
         K_trans = self._rbf_kernel(X, self.X_train)
-        K_ss = self._rbf_kernel(X, X)
-        
-        # Mean prediction
-        mu = K_trans @ self.K_inv @ self.y_train
-        
-        # Variance prediction
-        var = np.diag(K_ss - K_trans @ self.K_inv @ K_trans.T)
-        var = np.maximum(var, 1e-6)  # Ensure positive
-        
+
+        # Mean prediction: k_* @ alpha
+        mu = K_trans @ self._alpha
+
+        # Variance: k(x,x) - v^T v,  v = L^{-1} k(X_train, x)
+        v = solve_triangular(self._L, K_trans.T, lower=True)
+        var = np.diag(self._rbf_kernel(X, X)) - np.sum(v ** 2, axis=0)
+        var = np.maximum(var, 1e-6)
+
         return mu, np.sqrt(var)
 
 

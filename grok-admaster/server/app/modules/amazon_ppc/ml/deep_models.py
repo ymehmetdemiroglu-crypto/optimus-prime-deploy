@@ -372,13 +372,17 @@ if TORCH_AVAILABLE:
             static_processed, static_wt = self.static_vsn(static_expanded)
             self._variable_importance = static_wt.detach()
 
-            # Process temporal features per timestep
+            # Process temporal features — vectorised over the time dimension.
+            # Reshape (B, T, n_temp, 1) → (B*T, n_temp, 1) so all timesteps
+            # go through VariableSelectionNetwork in a single batched forward
+            # pass instead of a Python loop over seq_len.  This allows PyTorch
+            # to schedule a single kernel launch and benefits from torch.compile
+            # kernel fusion across the full (B*T) batch.
             temporal_expanded = temporal_features.unsqueeze(-1)  # (B, T, n_temp, 1)
-            temporal_list = []
-            for t in range(self.seq_len):
-                t_proc, _ = self.temporal_vsn(temporal_expanded[:, t, :, :])
-                temporal_list.append(t_proc)
-            temporal_processed = torch.stack(temporal_list, dim=1)  # (B, T, d_model)
+            n_temp = temporal_expanded.shape[2]
+            temporal_merged = temporal_expanded.reshape(B * self.seq_len, n_temp, 1)
+            temporal_merged_proc, _ = self.temporal_vsn(temporal_merged)
+            temporal_processed = temporal_merged_proc.view(B, self.seq_len, -1)  # (B, T, d_model)
 
             # Static enrichment — add static context to each timestep
             static_rep = static_processed.unsqueeze(1).expand(-1, self.seq_len, -1)
@@ -451,6 +455,14 @@ class TransferLearningManager:
                 n_heads=n_heads,
                 n_layers=n_layers,
             )
+            # torch.compile() (PyTorch 2.0+) fuses the Transformer attention
+            # kernels and MLP head into a single compiled graph, reducing
+            # Python overhead and enabling kernel fusion on CUDA / CPU.
+            if hasattr(torch, 'compile'):
+                try:
+                    self.base_model = torch.compile(self.base_model)
+                except Exception:
+                    pass  # best-effort: fall back to eager
         else:
             self.base_model = None
             logger.warning("[TransferLearning] PyTorch not available")
@@ -675,11 +687,17 @@ class TransferLearningManager:
             elif "bid" in row:
                 targets.append(float(row["bid"]))
 
+        # torch.from_numpy() on a contiguous numpy array avoids an extra copy
+        # that torch.tensor(python_list) would perform.  Especially important
+        # when building batches from hundreds of DB rows.
         cat_tensors = {
-            k: torch.tensor(v, dtype=torch.long) for k, v in cat_tensors.items()
+            k: torch.from_numpy(np.array(v, dtype=np.int64))
+            for k, v in cat_tensors.items()
         }
-        num_tensor = torch.tensor(num_list, dtype=torch.float32)
-        target_tensor = torch.tensor(targets, dtype=torch.float32) if targets else None
+        num_tensor = torch.from_numpy(np.array(num_list, dtype=np.float32))
+        target_tensor = (
+            torch.from_numpy(np.array(targets, dtype=np.float32)) if targets else None
+        )
 
         return cat_tensors, num_tensor, target_tensor
 
