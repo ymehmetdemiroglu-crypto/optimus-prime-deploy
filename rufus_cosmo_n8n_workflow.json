@@ -1,0 +1,69 @@
+{
+    "name": "Rufus and Cosmo Optimizations - Testing and Validation",
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "1",
+            "name": "Manual Trigger",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "pytest tests/modules/amazon_ppc/test_e2e_workflow.py"
+            },
+            "id": "2",
+            "name": "Run Pytest",
+            "type": "n8n-nodes-base.executeCommand",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "command": "git add grok-admaster/server/migrations/08_rufus_cosmo_optimizations.sql tests/modules/amazon_ppc/test_e2e_workflow.py && git commit -m \"chore: validate and fix Rufus and Cosmo optimization scripts\" && git push"
+            },
+            "id": "3",
+            "name": "Commit and Push",
+            "type": "n8n-nodes-base.executeCommand",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Manual Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Run Pytest",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Run Pytest": {
+            "main": [
+                [
+                    {
+                        "node": "Commit and Push",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": false,
+    "settings": {},
+    "versionId": "1"
+}
