@@ -17,6 +17,8 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
       - REDIS_URL=redis://redis:6379/0
       - ENV=production
+      # n8n MCP server URL (for chat agent to trigger n8n workflows via MCP)
+      - N8N_MCP_URL=http://n8n:5678/mcp/optimus-n8n-mcp/sse
     depends_on:
       db:
         condition: service_healthy
@@ -112,6 +114,9 @@ services:
       - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
       # Optimus Prime API connection (used in n8n credentials)
       - OPTIMUS_API_URL=http://api:8000
+      # MCP SSE Bridge for n8n to consume Optimus MCP tools
+      - MCP_BRIDGE_HOST=mcp-bridge
+      - MCP_BRIDGE_URL=http://mcp-bridge:3001/sse
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n/nodes:/home/node/.n8n/custom/nodes
@@ -121,7 +126,39 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+      mcp-bridge:
+        condition: service_started
     restart: always
+
+  # ===================================================
+  # 6. MCP SSE Bridge
+  #    Exposes Optimus MCP tools (Cortex + DSP) over SSE
+  #    so n8n's MCP Client can consume them.
+  # ===================================================
+  mcp-bridge:
+    build: .
+    container_name: optimus-mcp-bridge
+    command: [ "python", "-m", "app.mcp.sse_bridge", "--port", "3001" ]
+    env_file:
+      - ./grok-admaster/server/.env
+    environment:
+      - DATABASE_URL=postgresql://optimus:${DB_PASSWORD:-optimus_secure}@db:5432/optimus_pryme
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - ENV=production
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:

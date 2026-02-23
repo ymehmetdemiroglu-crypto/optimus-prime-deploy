@@ -1,0 +1,88 @@
+{
+  "name": "Optimus Prime — MCP AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "webhookId": "optimus-mcp-chat"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are Optimus, the AI co-pilot for Optimus Prime — an Amazon PPC war room. You have access to powerful MCP tools for semantic analysis, market intelligence, DSP audience management, and campaign creation. Use these tools to help operators optimize their Amazon advertising.\n\nAvailable tool categories:\n- Semantic Intelligence: analyze_semantic_bleed, find_untapped_opportunities, get_semantic_health_report, embed_new_product, query_patrol_log\n- DSP War Room: get_dsp_audiences, simulate_attack\n- Market Analysis: analyze_market_position\n- PPC Management: get_ppc_recommendations, create_ppc_campaign\n\nAlways explain your reasoning and the impact of actions taken."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [220, 500],
+      "credentials": {
+        "openAiApi": { "id": "1", "name": "OpenRouter" }
+      }
+    },
+    {
+      "parameters": {
+        "sseEndpoint": "=http://{{ $env.MCP_BRIDGE_HOST || 'mcp-bridge' }}:3001/sse"
+      },
+      "id": "mcp-client-cortex",
+      "name": "MCP Client: Optimus Tools",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [400, 500]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.sessionId || 'default' }}"
+      },
+      "id": "memory",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [60, 500]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "MCP Client: Optimus Tools": {
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "optimus-prime" },
+    { "name": "mcp" },
+    { "name": "ai-agent" }
+  ]
+}

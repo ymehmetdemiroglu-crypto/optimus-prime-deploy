@@ -3,33 +3,63 @@
 ## Architecture Overview
 
 ```
+                        ┌─────────────────────────┐
+                        │   External AI Agents     │
+                        │ (Claude, ChatGPT, etc.)  │
+                        └───────────┬─────────────┘
+                                    │ MCP (SSE)
+                                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    n8n Workflow Orchestrator                     │
 │                     (localhost:5678)                             │
-├─────────────┬─────────────────┬─────────────────────────────────┤
-│  01_Master  │  02_Anomaly     │  03_Daily Optimization          │
-│  Orchestr.  │  Response       │  Cycle                          │
-│  (30 min)   │  (sub-workflow) │  (6:00 AM daily)                │
-└──────┬──────┴────────┬────────┴─────────┬───────────────────────┘
-       │               │                  │
-       ▼               ▼                  ▼
+├─────────────┬──────────────┬──────────────┬─────────────────────┤
+│  01_Master  │ 02_Anomaly   │ 03_Daily Opt │ 05_MCP Server       │
+│  Orchestr.  │ Response     │ Cycle        │ (exposes workflows  │
+│  (30 min)   │ (sub-wf)     │ (6 AM daily) │  as MCP tools)      │
+└──────┬──────┴──────┬───────┴──────┬───────┴────────┬────────────┘
+       │             │              │                │
+       │ HTTP/REST   │              │                │ MCP Client (SSE)
+       ▼             ▼              ▼                ▼
+┌──────────────────────────────────┐ ┌────────────────────────────┐
+│  Optimus Prime Custom n8n Node   │ │  04_MCP AI Agent           │
+│  (OptimusPrime.node.ts)          │ │  (Chat + MCP Client)       │
+│  25+ operations across 10 APIs   │ │  Uses all 10 MCP tools     │
+└──────────────┬───────────────────┘ └───────────┬────────────────┘
+               │ HTTP/REST                       │ MCP (SSE)
+               ▼                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│             Optimus Prime Custom n8n Node                       │
-│    (OptimusPrime.node.ts + OptimusPrimeApi.credentials.ts)      │
-├─────────────────────────────────────────────────────────────────┤
-│  Resources: Dashboard | Campaign | Anomaly | Optimization       │
-│             Contextual Bidding | RL Budget | Semantic Intel      │
-│             Competitive Intel | Ingestion | Health               │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ HTTP/REST
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                Optimus Prime API (FastAPI)                       │
-│                    (localhost:8000)                              │
+│                Optimus Prime API (FastAPI :8000)                 │
 ├──────┬──────┬────────┬────────┬──────────┬──────────────────────┤
 │ Dash │ Camp │ Anomal │ ML/TS  │ Semantic │ Autonomous Operator  │
 │ board│ aigns│ ies    │ Bidding│ Cortex   │ (6hr patrol cycles)  │
-└──────┴──────┴────────┴────────┴──────────┴──────────────────────┘
+└──────┴──────┴────────┴───┬────┴──────────┴──────────────────────┘
+                           │
+               ┌───────────┴───────────┐
+               ▼                       ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│ MCP Cortex (stdio)   │  │ MCP DSP Server       │
+│ 5 Semantic tools     │  │ 5 Market/PPC tools   │
+└──────────┬───────────┘  └──────────┬───────────┘
+           │ Aggregated via SSE      │
+           ▼                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              MCP SSE Bridge (FastAPI :3001)                      │
+│      Wraps stdio MCP servers → SSE transport for n8n            │
+│      10 tools: bleed detect, opportunities, DSP, PPC, etc.      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### MCP Data Flow
+
+```
+WebSocket Chat Agent ──► MCP Client (stdio)  ──► mcp_cortex.py (Semantic)
+         │                                   ──► mcp_dsp_server.py (DSP/PPC)
+         │              MCP Client (SSE)     ──► n8n MCP Server (Workflows)
+         │
+n8n AI Agent (04) ─────► MCP Client (SSE)   ──► MCP SSE Bridge (:3001)
+                                                  ├─► Cortex tools
+                                                  └─► DSP tools
+n8n MCP Server (05) ◄── External AI Agents (Claude, etc.) via SSE
 ```
 
 ## Workflows
@@ -78,6 +108,54 @@
 10. Build daily summary report
 11. Post to Slack + Email report
 
+### 4. MCP AI Agent (`04_mcp_ai_agent.json`)
+**Trigger:** Chat interface (webhook)
+
+n8n's built-in AI Agent node connects to the MCP SSE Bridge as a client, giving it
+access to all 10 Optimus Prime MCP tools (semantic bleed detection, DSP audiences,
+market analysis, PPC recommendations, campaign creation, etc.).
+
+**Components:**
+- Chat Trigger → AI Agent → OpenAI Chat Model (GPT-4o via OpenRouter)
+- MCP Client Tool → connects to `http://mcp-bridge:3001/sse`
+- Window Buffer Memory for conversation context
+
+### 5. MCP Server Triggers (`05_mcp_server_triggers.json`)
+**Trigger:** External AI agents (Claude, ChatGPT, etc.) via MCP protocol
+
+Exposes n8n workflow orchestration as MCP tools that any MCP-compatible AI agent
+can call. This means the WebSocket chat agent (or any external AI) can trigger:
+
+| MCP Tool | Description |
+|----------|-------------|
+| `run_daily_optimization` | Trigger the full daily optimization cycle |
+| `check_system_health` | API health check via n8n |
+| `get_anomaly_report` | Fetch and summarize anomalies with priority breakdown |
+| `optimize_client_bids` | Run contextual Thompson Sampling for a profile |
+| `allocate_budget` | Run RL budget allocation for a profile |
+
+## MCP SSE Bridge
+
+The MCP SSE Bridge (`app/mcp/sse_bridge.py`) aggregates both existing stdio-based
+MCP servers into a single SSE endpoint that n8n can connect to.
+
+**Port:** `3001` | **Endpoint:** `GET /sse`
+
+**Registered tools (10 total):**
+
+| Source | Tool | Description |
+|--------|------|-------------|
+| Cortex | `analyze_semantic_bleed` | Detect wasted spend from irrelevant terms |
+| Cortex | `find_untapped_opportunities` | Find high-value untargeted terms |
+| Cortex | `get_semantic_health_report` | Account semantic health status |
+| Cortex | `embed_new_product` | Onboard ASIN to semantic system |
+| Cortex | `query_patrol_log` | Autonomous operator activity log |
+| DSP | `get_dsp_audiences` | Active DSP audience metrics |
+| DSP | `simulate_attack` | Simulate DSP attack strategy impact |
+| DSP | `analyze_market_position` | Live market position analysis |
+| DSP | `get_ppc_recommendations` | AI-powered keyword/bid recommendations |
+| DSP | `create_ppc_campaign` | Provision new PPC campaign |
+
 ## Setup
 
 ### 1. Start the Stack
@@ -103,6 +181,8 @@ n8n will be available at `http://localhost:5678`.
 2. Import in order:
    - `workflows/02_anomaly_response.json` (sub-workflow first)
    - `workflows/03_daily_optimization.json`
+   - `workflows/05_mcp_server_triggers.json` (MCP server)
+   - `workflows/04_mcp_ai_agent.json` (MCP client)
    - `workflows/01_master_orchestration.json` (master last)
 
 ### 4. Configure Notification Channels
@@ -116,6 +196,8 @@ Set these environment variables in `.env` or docker-compose:
 | `TELEGRAM_CHAT_ID` | Telegram chat ID for API-down alerts |
 | `GOOGLE_SHEET_ID` | Google Sheet ID for anomaly logging |
 | `REPORT_EMAIL` | Email for daily optimization reports |
+| `N8N_MCP_URL` | n8n MCP server URL (auto-set in Docker) |
+| `MCP_BRIDGE_HOST` | MCP SSE bridge hostname (auto-set in Docker) |
 
 ### 5. Activate Workflows
 

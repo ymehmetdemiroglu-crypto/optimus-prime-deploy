@@ -20,16 +20,30 @@ def _get_mcp_client():
     if _mcp_client is None:
         from langchain_mcp_adapters.client import MultiServerMCPClient
         app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp_dsp_server.py"))
-        # Use "python3" — the POSIX standard; "py" is Windows-only and will fail on Linux.
-        _mcp_client = MultiServerMCPClient(
-            {
-                "dsp": {
-                    "transport": "stdio",
-                    "command": "python3",
-                    "args": [app_path],
-                }
+        cortex_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp_cortex.py"))
+
+        servers = {
+            "dsp": {
+                "transport": "stdio",
+                "command": "python3",
+                "args": [app_path],
+            },
+            "cortex": {
+                "transport": "stdio",
+                "command": "python3",
+                "args": [cortex_path],
+            },
+        }
+
+        # Connect to n8n MCP server if available (exposes workflow orchestration tools)
+        n8n_mcp_url = os.getenv("N8N_MCP_URL")
+        if n8n_mcp_url:
+            servers["n8n"] = {
+                "transport": "sse",
+                "url": n8n_mcp_url,
             }
-        )
+
+        _mcp_client = MultiServerMCPClient(servers)
     return _mcp_client
 
 

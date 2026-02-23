@@ -1,0 +1,187 @@
+{
+  "name": "Optimus Prime — MCP Server (Workflow Tools)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "optimus-n8n-mcp",
+        "options": {}
+      },
+      "id": "mcp-server-trigger",
+      "name": "MCP Server Trigger",
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "route-tool",
+              "leftValue": "={{ $json.tool }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "has-tool",
+      "name": "Has Tool Name?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputIndex": 0, "value": "run_daily_optimization" },
+            { "outputIndex": 1, "value": "check_system_health" },
+            { "outputIndex": 2, "value": "get_anomaly_report" },
+            { "outputIndex": 3, "value": "optimize_client_bids" },
+            { "outputIndex": 4, "value": "allocate_budget" }
+          ]
+        },
+        "dataType": "string",
+        "value": "={{ $json.tool }}"
+      },
+      "id": "route-by-tool",
+      "name": "Route by Tool",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "health",
+        "operation": "check"
+      },
+      "id": "tool-health-check",
+      "name": "Health Check",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [740, 80],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "anomaly",
+        "operation": "getFeed"
+      },
+      "id": "tool-anomaly-feed",
+      "name": "Get Anomaly Feed",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [740, 240],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build anomaly report summary\nconst anomalies = $input.all().map(item => item.json);\nconst flat = Array.isArray(anomalies[0]) ? anomalies[0] : anomalies;\nconst high = flat.filter(a => a.priority === 'high');\nconst medium = flat.filter(a => a.priority === 'medium');\n\nreturn [{\n  json: {\n    total_anomalies: flat.length,\n    high_priority: high.length,\n    medium_priority: medium.length,\n    high_items: high.map(a => ({ title: a.title, impact: a.metric_value, recommendation: a.ai_recommendation })),\n    medium_items: medium.map(a => ({ title: a.title, recommendation: a.ai_recommendation })),\n    generated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "build-anomaly-report",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 240]
+    },
+    {
+      "parameters": {
+        "resource": "contextualBidding",
+        "operation": "optimize",
+        "profileId": "={{ $json.arguments?.profile_id || $json.profile_id || 'default' }}",
+        "dryRun": "={{ $json.arguments?.dry_run !== false }}"
+      },
+      "id": "tool-optimize-bids",
+      "name": "Optimize Bids",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [740, 400],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "rlBudget",
+        "operation": "allocate",
+        "profileId": "={{ $json.arguments?.profile_id || $json.profile_id || 'default' }}",
+        "totalBudget": "={{ $json.arguments?.total_budget || 500 }}",
+        "dryRun": "={{ $json.arguments?.dry_run !== false }}"
+      },
+      "id": "tool-allocate-budget",
+      "name": "Allocate Budget",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [740, 560],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Run a full daily optimization cycle via sub-workflow trigger\n// This returns immediately with a status - the actual cycle runs asynchronously\nreturn [{\n  json: {\n    status: 'triggered',\n    message: 'Daily optimization cycle has been triggered. Check the Daily Optimization workflow execution for results.',\n    triggered_at: new Date().toISOString(),\n    workflow: '03_daily_optimization'\n  }\n}];"
+      },
+      "id": "tool-daily-opt",
+      "name": "Trigger Daily Optimization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the result back as MCP tool response\nconst result = $input.first().json;\nreturn [{\n  json: {\n    content: [{\n      type: 'text',\n      text: JSON.stringify(result, null, 2)\n    }]\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format MCP Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "MCP Server Trigger": {
+      "main": [[{ "node": "Has Tool Name?", "type": "main", "index": 0 }]]
+    },
+    "Has Tool Name?": {
+      "main": [
+        [{ "node": "Route by Tool", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Route by Tool": {
+      "main": [
+        [{ "node": "Trigger Daily Optimization", "type": "main", "index": 0 }],
+        [{ "node": "Health Check", "type": "main", "index": 0 }],
+        [{ "node": "Get Anomaly Feed", "type": "main", "index": 0 }],
+        [{ "node": "Optimize Bids", "type": "main", "index": 0 }],
+        [{ "node": "Allocate Budget", "type": "main", "index": 0 }]
+      ]
+    },
+    "Health Check": {
+      "main": [[{ "node": "Format MCP Response", "type": "main", "index": 0 }]]
+    },
+    "Get Anomaly Feed": {
+      "main": [[{ "node": "Build Report", "type": "main", "index": 0 }]]
+    },
+    "Build Report": {
+      "main": [[{ "node": "Format MCP Response", "type": "main", "index": 0 }]]
+    },
+    "Optimize Bids": {
+      "main": [[{ "node": "Format MCP Response", "type": "main", "index": 0 }]]
+    },
+    "Allocate Budget": {
+      "main": [[{ "node": "Format MCP Response", "type": "main", "index": 0 }]]
+    },
+    "Trigger Daily Optimization": {
+      "main": [[{ "node": "Format MCP Response", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "optimus-prime" },
+    { "name": "mcp" },
+    { "name": "mcp-server" }
+  ]
+}
