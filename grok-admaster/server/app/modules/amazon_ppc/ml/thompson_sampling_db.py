@@ -271,16 +271,24 @@ class _ArmPosterior:
     def sample(self, context: np.ndarray) -> float:
         """
         Draw w ~ N(mu_n, sigma² B_n^{-1}), return context^T w.
+
+        Uses Cholesky decomposition of the precision matrix B instead of
+        explicit inversion (la.inv).  For B = L L^T:
+            w = mu + sqrt(sigma²) * L^{-T} z,  z ~ N(0, I)
+        This avoids forming B^{-1} entirely and is O(n²) per sample vs
+        O(n³) for inv(), with much better numerical stability as the
+        precision matrix grows with observations.
         """
         mu = self._posterior_mean()
         try:
-            cov = self.sigma2 * la.inv(self.B)
-            # Make numerically symmetric
-            cov = (cov + cov.T) / 2
-            w_sample = np.random.multivariate_normal(mu, cov)
-        except la.LinAlgError:
+            L = np.linalg.cholesky(self.B)
+            z = np.random.randn(self.dim)
+            # Solve L^T v = z  →  v = L^{-T} z
+            v = la.solve_triangular(L, z, trans='T', lower=True)
+            w_sample = mu + np.sqrt(self.sigma2) * v
+        except (np.linalg.LinAlgError, la.LinAlgError):
             # Fallback: diagonal approximation
-            var = self.sigma2 / np.diag(self.B)
+            var = self.sigma2 / np.maximum(np.diag(self.B), 1e-10)
             w_sample = mu + np.random.randn(self.dim) * np.sqrt(np.abs(var))
         return float(context @ w_sample)
 
