@@ -1,0 +1,213 @@
+{
+  "name": "Optimus Prime — Anomaly Response Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-wh",
+      "name": "Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "resource": "anomaly",
+        "operation": "getFeed"
+      },
+      "id": "get-anomaly-feed",
+      "name": "Get Full Anomaly Feed",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter and prioritize anomalies\nconst anomalies = $input.all().map(item => item.json);\nconst flat = Array.isArray(anomalies[0]) ? anomalies[0] : anomalies;\n\nconst priorityOrder = { high: 0, medium: 1, low: 2 };\nconst sorted = flat.sort((a, b) => (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3));\n\nconst highPriority = sorted.filter(a => a.priority === 'high');\nconst mediumPriority = sorted.filter(a => a.priority === 'medium');\n\n// Return high and medium priority anomalies as separate items\nconst output = [...highPriority, ...mediumPriority].map(a => ({ json: a }));\nreturn output.length > 0 ? output : [{ json: { message: 'No actionable anomalies' } }];"
+      },
+      "id": "prioritize",
+      "name": "Prioritize Anomalies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Split into Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-high",
+              "leftValue": "={{ $json.priority }}",
+              "rightValue": "high",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-by-severity",
+      "name": "Route by Severity",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "resource": "anomaly",
+        "operation": "explain",
+        "anomalyData": "={{ JSON.stringify({ type: $json.title, keyword: $json.subtitle, severity: $json.priority, description: $json.title + ' - ' + $json.subtitle, metric: $json.metric, expected_value: 0, actual_value: $json.metric_value }) }}"
+      },
+      "id": "explain-high",
+      "name": "GPT-4 Explain (High)",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [1120, 200],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build actionable response from AI explanation\nconst anomaly = $('Route by Severity').first().json;\nconst explanation = $input.first().json;\n\nreturn [{\n  json: {\n    anomaly_id: anomaly.id,\n    title: anomaly.title,\n    priority: anomaly.priority,\n    ai_explanation: explanation.explanation || explanation.content || 'Analysis pending',\n    recommended_action: anomaly.ai_recommendation,\n    impact: anomaly.metric_value,\n    auto_action: anomaly.ai_recommendation.toLowerCase().includes('pause') ? 'PAUSE_CAMPAIGN' :\n                 anomaly.ai_recommendation.toLowerCase().includes('match') ? 'ADJUST_BID' :\n                 'NOTIFY_OPERATOR',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "build-action-plan",
+      "name": "Build Action Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-pause",
+              "leftValue": "={{ $json.auto_action }}",
+              "rightValue": "PAUSE_CAMPAIGN",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "should-auto-act",
+      "name": "Auto-Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "resource": "campaign",
+        "operation": "updateStrategy",
+        "campaignId": "={{ $json.anomaly_id.replace('anom_', '') }}",
+        "aiMode": "profit_guard"
+      },
+      "id": "switch-to-profit-guard",
+      "name": "Switch → Profit Guard",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [1800, 120],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "channel": "#optimus-alerts",
+        "text": "=🚨 *ANOMALY AUTO-RESPONSE EXECUTED*\n\n*{{ $json.title }}*\nPriority: {{ $json.priority }} | Impact: {{ $json.impact }}\n\n🧠 *AI Analysis*: {{ $json.ai_explanation }}\n🎯 *Action Taken*: {{ $json.auto_action }}\n⏰ {{ $json.timestamp }}",
+        "otherOptions": {}
+      },
+      "id": "slack-anomaly-alert",
+      "name": "Slack: Anomaly Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1800, 280]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log medium-priority anomalies for daily report\nconst anomaly = $input.first().json;\nreturn [{\n  json: {\n    type: 'medium_priority_logged',\n    anomaly_id: anomaly.id,\n    title: anomaly.title,\n    recommendation: anomaly.ai_recommendation,\n    logged_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "log-medium",
+      "name": "Log for Daily Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Anomaly Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "log-to-sheet",
+      "name": "Log to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Workflow Trigger": {
+      "main": [[{ "node": "Get Full Anomaly Feed", "type": "main", "index": 0 }]]
+    },
+    "Get Full Anomaly Feed": {
+      "main": [[{ "node": "Prioritize Anomalies", "type": "main", "index": 0 }]]
+    },
+    "Prioritize Anomalies": {
+      "main": [[{ "node": "Split into Batches", "type": "main", "index": 0 }]]
+    },
+    "Split into Batches": {
+      "main": [
+        [{ "node": "Route by Severity", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Severity": {
+      "main": [
+        [{ "node": "GPT-4 Explain (High)", "type": "main", "index": 0 }],
+        [{ "node": "Log for Daily Report", "type": "main", "index": 0 }]
+      ]
+    },
+    "GPT-4 Explain (High)": {
+      "main": [[{ "node": "Build Action Plan", "type": "main", "index": 0 }]]
+    },
+    "Build Action Plan": {
+      "main": [[{ "node": "Auto-Action?", "type": "main", "index": 0 }]]
+    },
+    "Auto-Action?": {
+      "main": [
+        [
+          { "node": "Switch → Profit Guard", "type": "main", "index": 0 },
+          { "node": "Slack: Anomaly Alert", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Slack: Anomaly Alert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Log for Daily Report": {
+      "main": [[{ "node": "Log to Google Sheet", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": [
+    { "name": "optimus-prime" },
+    { "name": "anomaly" },
+    { "name": "sub-workflow" }
+  ]
+}

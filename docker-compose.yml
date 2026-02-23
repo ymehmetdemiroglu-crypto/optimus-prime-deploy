@@ -84,6 +84,46 @@ services:
     volumes:
       - redis_data:/data
 
+  # ===================================================
+  # 5. n8n Workflow Orchestrator
+  #    Connects to Optimus Prime API for automated
+  #    optimization, anomaly response, and reporting.
+  # ===================================================
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: optimus-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-optimus_n8n}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=optimus_pryme
+      - DB_POSTGRESDB_USER=optimus
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD:-optimus_secure}
+      - DB_POSTGRESDB_SCHEMA=n8n
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+      # Optimus Prime API connection (used in n8n credentials)
+      - OPTIMUS_API_URL=http://api:8000
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/nodes:/home/node/.n8n/custom/nodes
+      - ./n8n/credentials:/home/node/.n8n/custom/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: always
+
 volumes:
   postgres_data:
   redis_data:
+  n8n_data:

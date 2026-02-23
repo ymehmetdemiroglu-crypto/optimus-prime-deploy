@@ -1,0 +1,266 @@
+{
+  "name": "Optimus Prime — Daily Optimization Cycle",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 6 * * *" }]
+        }
+      },
+      "id": "cron-6am",
+      "name": "Daily at 6:00 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "resource": "health",
+        "operation": "check"
+      },
+      "id": "health-gate",
+      "name": "Health Gate",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "ingestion",
+        "operation": "triggerSync"
+      },
+      "id": "trigger-ingestion",
+      "name": "1. Ingest Amazon Data",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-ingestion",
+      "name": "Wait for Ingestion",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "resource": "dashboard",
+        "operation": "getClientMatrix"
+      },
+      "id": "get-all-clients",
+      "name": "2. Get All Clients",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [880, 300],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract active clients that need optimization\nconst clients = $input.all().map(item => item.json);\nconst flat = Array.isArray(clients[0]) ? clients[0] : clients;\n\nreturn flat\n  .filter(c => c.status !== 'critical' && c.apis && !c.apis.includes('DISCONNECTED'))\n  .map(client => ({\n    json: {\n      client_id: client.id,\n      client_name: client.name,\n      current_acos: client.acos,\n      current_spend: client.spend,\n      status: client.status,\n      needs_aggressive: client.acos > 25,\n      needs_defense: client.acos_trend > 5\n    }\n  }));"
+      },
+      "id": "filter-active-clients",
+      "name": "Filter Active Clients",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "per-client-batch",
+      "name": "Per-Client Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contextualBidding",
+        "operation": "optimize",
+        "profileId": "={{ $json.client_id }}",
+        "dryRun": false
+      },
+      "id": "run-contextual-ts",
+      "name": "3a. Contextual TS Optimize",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [1560, 160],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "rlBudget",
+        "operation": "allocate",
+        "profileId": "={{ $json.client_id }}",
+        "totalBudget": "={{ $json.current_spend > 0 ? $json.current_spend : 500 }}",
+        "dryRun": false
+      },
+      "id": "run-rl-budget",
+      "name": "3b. RL Budget Allocation",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [1560, 340],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "semantic",
+        "operation": "detectBleed",
+        "accountId": "={{ parseInt($('Per-Client Loop').first().json.client_id.replace(/[^0-9]/g, '')) || 1 }}",
+        "asin": "all"
+      },
+      "id": "run-bleed-detect",
+      "name": "3c. Semantic Bleed Detect",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [1560, 520],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge all optimization results for this client\nconst client = $('Per-Client Loop').first().json;\nconst tsResult = $('3a. Contextual TS Optimize').first().json;\nconst rlResult = $('3b. RL Budget Allocation').first().json;\nconst bleedResult = $('3c. Semantic Bleed Detect').first().json;\n\nreturn [{\n  json: {\n    client_id: client.client_id,\n    client_name: client.client_name,\n    previous_acos: client.current_acos,\n    optimizations: {\n      contextual_bidding: {\n        status: tsResult.status || 'completed',\n        changes_made: tsResult.changes_applied || tsResult.total_changes || 0\n      },\n      budget_allocation: {\n        status: rlResult.status || 'completed',\n        allocations: rlResult.allocations || []\n      },\n      semantic_bleed: {\n        bleed_terms_found: bleedResult.bleed_terms_found || 0,\n        wasted_spend: bleedResult.total_wasted_spend || 0\n      }\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "merge-results",
+      "name": "Merge Client Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 340]
+    },
+    {
+      "parameters": {
+        "resource": "contextualBidding",
+        "operation": "learn",
+        "profileId": "={{ $json.client_id }}",
+        "lookbackDays": 7
+      },
+      "id": "learning-step",
+      "name": "4. Learning Step",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [2040, 340],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "rlBudget",
+        "operation": "learnRl",
+        "profileId": "={{ $json.client_id }}",
+        "lookbackDays": 1
+      },
+      "id": "rl-learning",
+      "name": "5. RL Policy Update",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [2260, 340],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build daily summary report\nconst allResults = $input.all().map(i => i.json);\n\nconst totalBidChanges = allResults.reduce((sum, r) => sum + (r.optimizations?.contextual_bidding?.changes_made || 0), 0);\nconst totalBleedSaved = allResults.reduce((sum, r) => sum + (r.optimizations?.semantic_bleed?.wasted_spend || 0), 0);\n\nreturn [{\n  json: {\n    report_date: new Date().toISOString().split('T')[0],\n    clients_optimized: allResults.length,\n    total_bid_changes: totalBidChanges,\n    total_bleed_waste_found: totalBleedSaved,\n    client_summaries: allResults.map(r => ({\n      name: r.client_name,\n      bid_changes: r.optimizations?.contextual_bidding?.changes_made || 0,\n      bleed_waste: r.optimizations?.semantic_bleed?.wasted_spend || 0\n    })),\n    status: 'DAILY_CYCLE_COMPLETE'\n  }\n}];"
+      },
+      "id": "build-report",
+      "name": "6. Build Daily Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 340]
+    },
+    {
+      "parameters": {
+        "channel": "#optimus-daily",
+        "text": "=🤖 *Optimus Prime — Daily Optimization Complete*\n\n📅 *Date*: {{ $json.report_date }}\n👥 *Clients Optimized*: {{ $json.clients_optimized }}\n🎯 *Bid Changes Applied*: {{ $json.total_bid_changes }}\n💸 *Wasted Spend Identified*: ${{ $json.total_bleed_waste_found.toFixed(2) }}\n\n*Per-Client Summary*:\n{{ $json.client_summaries.map(c => `• ${c.name}: ${c.bid_changes} bid changes, $${c.bleed_waste.toFixed(2)} bleed waste`).join('\\n') }}\n\n✅ {{ $json.status }}",
+        "otherOptions": {}
+      },
+      "id": "slack-daily-report",
+      "name": "Post Daily Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2720, 340]
+    },
+    {
+      "parameters": {
+        "subject": "=Optimus Prime Daily Report — {{ $json.report_date }}",
+        "message": "=<h2>Daily Optimization Report</h2><p>Clients: {{ $json.clients_optimized }} | Bid Changes: {{ $json.total_bid_changes }} | Waste Found: ${{ $json.total_bleed_waste_found.toFixed(2) }}</p>",
+        "toEmail": "={{ $env.REPORT_EMAIL }}"
+      },
+      "id": "email-report",
+      "name": "Email Daily Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2720, 520]
+    }
+  ],
+  "connections": {
+    "Daily at 6:00 AM": {
+      "main": [[{ "node": "Health Gate", "type": "main", "index": 0 }]]
+    },
+    "Health Gate": {
+      "main": [[{ "node": "1. Ingest Amazon Data", "type": "main", "index": 0 }]]
+    },
+    "1. Ingest Amazon Data": {
+      "main": [[{ "node": "Wait for Ingestion", "type": "main", "index": 0 }]]
+    },
+    "Wait for Ingestion": {
+      "main": [[{ "node": "2. Get All Clients", "type": "main", "index": 0 }]]
+    },
+    "2. Get All Clients": {
+      "main": [[{ "node": "Filter Active Clients", "type": "main", "index": 0 }]]
+    },
+    "Filter Active Clients": {
+      "main": [[{ "node": "Per-Client Loop", "type": "main", "index": 0 }]]
+    },
+    "Per-Client Loop": {
+      "main": [
+        [
+          { "node": "3a. Contextual TS Optimize", "type": "main", "index": 0 },
+          { "node": "3b. RL Budget Allocation", "type": "main", "index": 0 },
+          { "node": "3c. Semantic Bleed Detect", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "3a. Contextual TS Optimize": {
+      "main": [[{ "node": "Merge Client Results", "type": "main", "index": 0 }]]
+    },
+    "3b. RL Budget Allocation": {
+      "main": [[{ "node": "Merge Client Results", "type": "main", "index": 0 }]]
+    },
+    "3c. Semantic Bleed Detect": {
+      "main": [[{ "node": "Merge Client Results", "type": "main", "index": 0 }]]
+    },
+    "Merge Client Results": {
+      "main": [[{ "node": "4. Learning Step", "type": "main", "index": 0 }]]
+    },
+    "4. Learning Step": {
+      "main": [[{ "node": "5. RL Policy Update", "type": "main", "index": 0 }]]
+    },
+    "5. RL Policy Update": {
+      "main": [[{ "node": "6. Build Daily Report", "type": "main", "index": 0 }]]
+    },
+    "6. Build Daily Report": {
+      "main": [
+        [
+          { "node": "Post Daily Report", "type": "main", "index": 0 },
+          { "node": "Email Daily Report", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "America/New_York"
+  },
+  "tags": [
+    { "name": "optimus-prime" },
+    { "name": "optimization" },
+    { "name": "daily" }
+  ]
+}

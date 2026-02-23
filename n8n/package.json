@@ -1,0 +1,42 @@
+{
+  "name": "n8n-nodes-optimus-prime",
+  "version": "1.0.0",
+  "description": "n8n community node for the Optimus Prime AI-Powered Amazon PPC War Room",
+  "keywords": [
+    "n8n-community-node-package",
+    "amazon-ppc",
+    "optimus-prime",
+    "advertising"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Optimus Prime Team"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ymehmetdemiroglu-crypto/optimus-prime-deploy"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "lint": "eslint nodes credentials --ext .ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/OptimusPrimeApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/OptimusPrime/OptimusPrime.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "n8n-workflow": "^1.0.0",
+    "typescript": "^5.3.0"
+  }
+}

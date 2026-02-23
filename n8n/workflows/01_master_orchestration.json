@@ -1,0 +1,247 @@
+{
+  "name": "Optimus Prime — Master Orchestration",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 30 }]
+        }
+      },
+      "id": "trigger-interval",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "resource": "health",
+        "operation": "check"
+      },
+      "id": "health-check",
+      "name": "API Health Check",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "health-ok",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "healthy",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-healthy",
+      "name": "Is Healthy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "resource": "anomaly",
+        "operation": "getFeed"
+      },
+      "id": "fetch-anomalies",
+      "name": "Fetch Anomaly Feed",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [700, 160],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "dashboard",
+        "operation": "getSummary"
+      },
+      "id": "fetch-summary",
+      "name": "Fetch Dashboard KPIs",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [700, 340],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "resource": "dashboard",
+        "operation": "getClientMatrix"
+      },
+      "id": "fetch-matrix",
+      "name": "Fetch Client Matrix",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [700, 520],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-high-anomaly",
+              "leftValue": "={{ $json.filter(a => a.priority === 'high').length }}",
+              "rightValue": "0",
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-critical-anomalies",
+      "name": "Critical Anomalies?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 160]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ $workflow.id.replace('01_master', '02_anomaly_response') }}",
+        "options": {}
+      },
+      "id": "trigger-anomaly-sub",
+      "name": "→ Anomaly Response Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1220, 80]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "acos-check",
+              "leftValue": "={{ $json.acos }}",
+              "rightValue": "25",
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-acos-high",
+      "name": "ACoS > 25%?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge client matrix + KPI data and flag clients needing intervention\nconst matrix = $('Fetch Client Matrix').all();\nconst summary = $('Fetch Dashboard KPIs').first().json;\nconst anomalies = $('Fetch Anomaly Feed').all();\n\nconst highPriorityAnomalies = anomalies.filter(a => a.json.priority === 'high');\nconst criticalClients = matrix.filter(c => c.json.status === 'critical' || c.json.status === 'warning');\n\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    system_acos: summary.acos,\n    system_roas: summary.roas,\n    total_sales: summary.total_sales,\n    ad_spend: summary.ad_spend,\n    high_priority_anomalies: highPriorityAnomalies.length,\n    critical_clients: criticalClients.map(c => ({\n      id: c.json.id,\n      name: c.json.name,\n      status: c.json.status,\n      acos: c.json.acos\n    })),\n    health_status: criticalClients.length === 0 ? 'ALL_GREEN' : 'NEEDS_ATTENTION',\n    next_action: summary.acos > 25 ? 'TRIGGER_OPTIMIZATION' : 'MONITOR'\n  }\n}];"
+      },
+      "id": "aggregate-status",
+      "name": "Aggregate System Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 520]
+    },
+    {
+      "parameters": {
+        "channel": "#optimus-alerts",
+        "text": "=🤖 *Optimus Prime Status Report*\n\n📊 *KPIs*: Sales ${{ $json.total_sales }} | Spend ${{ $json.ad_spend }} | ACoS {{ $json.system_acos }}% | ROAS {{ $json.system_roas }}x\n🚨 *High-Priority Anomalies*: {{ $json.high_priority_anomalies }}\n⚠️ *Clients Needing Attention*: {{ $json.critical_clients.length }}\n🏥 *Overall Status*: {{ $json.health_status }}\n📋 *Next Action*: {{ $json.next_action }}",
+        "otherOptions": {}
+      },
+      "id": "slack-status",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1220, 520]
+    },
+    {
+      "parameters": {
+        "resource": "contextualBidding",
+        "operation": "getStatus"
+      },
+      "id": "bidding-status",
+      "name": "Check Bidding Optimizer",
+      "type": "n8n-nodes-custom.optimusPrime",
+      "typeVersion": 1,
+      "position": [1220, 340],
+      "credentials": { "optimusPrimeApi": { "id": "1", "name": "Optimus Prime API" } }
+    },
+    {
+      "parameters": {
+        "message": "=⚠️ *API UNREACHABLE*\nOptimus Prime API failed health check at {{ $now.toISO() }}.\nPlease verify the API server and database are running.",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}"
+      },
+      "id": "alert-api-down",
+      "name": "Alert: API Down",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [660, 600]
+    },
+    {
+      "parameters": {},
+      "id": "noop-no-anomalies",
+      "name": "No Critical Anomalies",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1220, 200]
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [[{ "node": "API Health Check", "type": "main", "index": 0 }]]
+    },
+    "API Health Check": {
+      "main": [[{ "node": "Is Healthy?", "type": "main", "index": 0 }]]
+    },
+    "Is Healthy?": {
+      "main": [
+        [
+          { "node": "Fetch Anomaly Feed", "type": "main", "index": 0 },
+          { "node": "Fetch Dashboard KPIs", "type": "main", "index": 0 },
+          { "node": "Fetch Client Matrix", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Alert: API Down", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Anomaly Feed": {
+      "main": [[{ "node": "Critical Anomalies?", "type": "main", "index": 0 }]]
+    },
+    "Critical Anomalies?": {
+      "main": [
+        [{ "node": "→ Anomaly Response Workflow", "type": "main", "index": 0 }],
+        [{ "node": "No Critical Anomalies", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Dashboard KPIs": {
+      "main": [[{ "node": "ACoS > 25%?", "type": "main", "index": 0 }]]
+    },
+    "ACoS > 25%?": {
+      "main": [
+        [{ "node": "Check Bidding Optimizer", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Fetch Client Matrix": {
+      "main": [[{ "node": "Aggregate System Status", "type": "main", "index": 0 }]]
+    },
+    "Aggregate System Status": {
+      "main": [[{ "node": "Post to Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "optimus-prime" },
+    { "name": "orchestration" },
+    { "name": "master" }
+  ]
+}
