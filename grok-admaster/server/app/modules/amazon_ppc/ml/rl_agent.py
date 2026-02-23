@@ -60,13 +60,25 @@ class PPCRLAgent:
         self.target_net.eval()
         
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=learning_rate)
-        self.criterion = nn.MSELoss()
+        # SmoothL1Loss (Huber loss) is more robust than MSELoss when rewards
+        # have high variance (ACoS/ROAS spikes from ad spend data), because it
+        # caps the gradient magnitude for large errors instead of squaring them.
+        self.criterion = nn.SmoothL1Loss()
         
         self.memory = ReplayBuffer(capacity=10000)
         self.batch_size = 32
         self.update_target_every = 100
         self.steps_done = 0
-        
+
+        # torch.compile() (PyTorch 2.0+) fuses kernels in the DQN forward
+        # pass for lower inference latency on the action-selection hot path.
+        if hasattr(torch, 'compile'):
+            try:
+                self.policy_net = torch.compile(self.policy_net)
+                self.target_net = torch.compile(self.target_net)
+            except Exception:
+                pass  # compile is best-effort; fall back to eager mode
+
         self._load_model()
     
     def _load_model(self):
@@ -131,28 +143,34 @@ class PPCRLAgent:
         """Perform one step of optimization on the Policy Net."""
         if len(self.memory) < self.batch_size:
             return
-        
+
         states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
-        
-        states_t = torch.FloatTensor(states).to(self.device)
-        actions_t = torch.LongTensor(actions).unsqueeze(1).to(self.device)
-        rewards_t = torch.FloatTensor(rewards).to(self.device)
-        next_states_t = torch.FloatTensor(next_states).to(self.device)
-        dones_t = torch.FloatTensor(dones).to(self.device)
-        
+
+        # torch.from_numpy() shares memory with the numpy array (zero-copy on
+        # CPU) instead of torch.FloatTensor() which always copies the data.
+        states_t = torch.from_numpy(np.ascontiguousarray(states, dtype=np.float32)).to(self.device)
+        actions_t = torch.from_numpy(np.array(actions, dtype=np.int64)).unsqueeze(1).to(self.device)
+        rewards_t = torch.from_numpy(np.array(rewards, dtype=np.float32)).to(self.device)
+        next_states_t = torch.from_numpy(np.ascontiguousarray(next_states, dtype=np.float32)).to(self.device)
+        dones_t = torch.from_numpy(np.array(dones, dtype=np.float32)).to(self.device)
+
         # Q(s, a)
         current_q_values = self.policy_net(states_t).gather(1, actions_t)
-        
-        # V(s') = max Q(s', a')
-        next_q_values = self.target_net(next_states_t).max(1)[0].detach()
+
+        # V(s') = max Q(s', a') — no_grad is semantically cleaner than detach()
+        with torch.no_grad():
+            next_q_values = self.target_net(next_states_t).max(1)[0]
         expected_q_values = rewards_t + (self.gamma * next_q_values * (1 - dones_t))
-        
+
         loss = self.criterion(current_q_values.squeeze(), expected_q_values)
-        
+
         self.optimizer.zero_grad()
         loss.backward()
+        # Gradient clipping prevents exploding gradients from high-variance
+        # ACoS/ROAS reward signals (ad spend data can spike orders-of-magnitude).
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
         self.optimizer.step()
-        
+
         # Update target network
         self.steps_done += 1
         if self.steps_done % self.update_target_every == 0:

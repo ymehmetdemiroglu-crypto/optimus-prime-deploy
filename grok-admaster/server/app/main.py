@@ -48,6 +48,12 @@ async def lifespan(app: FastAPI):
         SearchTermEmbedding, ProductEmbedding,
         SemanticBleedLog, SemanticOpportunityLog, AutonomousPatrolLog
     )
+    # Rufus Attribution Models (data foundation)
+    from app.modules.amazon_ppc.ml.rufus_attribution import (
+        RufusAttributionEvent, RufusChannelComparison
+    )
+    # Contextual Bidding Models (already registered via thompson_sampling_db)
+    from app.modules.amazon_ppc.ml.thompson_sampling_db import BanditArm  # noqa: F811
 
     # Initialize logging
     from app.core.logging_config import get_logger
@@ -257,6 +263,13 @@ app.include_router(market_intel_router, prefix="/api/v1/market-intelligence", ta
 from app.api.semantic import router as semantic_router
 app.include_router(semantic_router, prefix="/api/v1/semantic", tags=["Semantic Intelligence"])
 
+# Register Rufus Attribution Tracking API (data foundation)
+from app.api.rufus_attribution import router as rufus_router
+app.include_router(rufus_router, prefix="/api/v1/rufus", tags=["Rufus Attribution"])
+
+# Register Contextual Bidding Features API (ML self-optimization layer)
+from app.api.contextual_bidding import router as contextual_bidding_router
+app.include_router(contextual_bidding_router, prefix="/api/v1/contextual-bidding", tags=["Contextual Bidding"])
 
 
 @app.get("/")
