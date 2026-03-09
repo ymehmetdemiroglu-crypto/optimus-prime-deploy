@@ -186,12 +186,25 @@ async def send_critical_alert_notifications():
             
             logger.info(f"[AnomalyMonitor] Found {len(alerts)} unacknowledged critical alerts")
             
-            # TODO: Implement actual notification sending
-            # for alert in alerts:
-            #     await send_email_notification(alert)
-            #     await send_slack_notification(alert)
+            from app.core.notifications import dispatch_alert
+
+            for alert in alerts:
+                await dispatch_alert(
+                    user_id=str(alert.profile_id),
+                    title="🚨 Critical Anomaly Detected",
+                    message=(
+                        f"Anomaly on {alert.entity_type} '{alert.entity_name}' "
+                        f"(score: {alert.anomaly_score:.2f}, threshold: {alert.threshold:.2f})"
+                    ),
+                    severity="critical",
+                    metadata={
+                        "alert_id": alert.id,
+                        "entity_id": alert.entity_id,
+                        "metric": alert.metric_name,
+                    },
+                )
             
-            logger.info(f"[Ano malyMonitor] Sent notifications for {len(alerts)} critical alerts")
+            logger.info(f"[AnomalyMonitor] Sent notifications for {len(alerts)} critical alerts")
             
         except Exception as e:
             logger.error(f"[AnomalyMonitor] Notification sending failed: {e}", exc_info=True)

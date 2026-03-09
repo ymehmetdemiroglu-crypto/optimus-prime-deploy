@@ -6,9 +6,16 @@ Provides pagination, filtering, and other common query parameters.
 """
 
 from typing import Optional, List
-from fastapi import Query, Header, HTTPException, status
+from fastapi import Query, Header, HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime, date
+from jose import JWTError, jwt as jose_jwt
+
+from app.core.config import settings
+
+# Security scheme for Swagger docs
+security_scheme = HTTPBearer(auto_error=False)
 
 
 class PaginationParams(BaseModel):
@@ -189,18 +196,19 @@ async def get_user_agent(
     return user_agent
 
 
-# Authentication dependencies (placeholder for future implementation)
+# ═══════════════════════════════════════════════════════════════════
+#  Authentication Dependencies (JWT Verification)
+# ═══════════════════════════════════════════════════════════════════
 
 async def get_current_user(
-    authorization: Optional[str] = Header(None)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
 ) -> Optional[dict]:
     """
-    Get current authenticated user.
+    Get current authenticated user by validating the JWT Bearer token.
 
-    PLACEHOLDER: Implement actual authentication logic here.
-
-    For now, returns None (no auth required).
-    In production, implement JWT/OAuth/API key validation.
+    Decodes the token using SECRET_KEY from config (must be set via env var).
+    Returns None if no credentials are provided (for optional-auth routes).
+    Raises 401 if the token is present but invalid.
 
     Usage:
         @app.get("/protected")
@@ -208,24 +216,38 @@ async def get_current_user(
             if not user:
                 raise HTTPException(status_code=401, detail="Not authenticated")
     """
-    # TODO: Implement actual authentication
-    # if not authorization:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_401_UNAUTHORIZED,
-    #         detail="Not authenticated",
-    #         headers={"WWW-Authenticate": "Bearer"},
-    #     )
-    #
-    # # Parse and validate token
-    # token = authorization.replace("Bearer ", "")
-    # user = await validate_token(token)
-    # return user
+    if credentials is None:
+        return None  # No token provided — allow optional-auth routes
 
-    return None  # No auth for now
+    token = credentials.credentials
+    try:
+        payload = jose_jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id: Optional[str] = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing 'sub' claim",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return {
+            "id": user_id,
+            "email": payload.get("email"),
+            "role": payload.get("role", "user"),
+        }
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 async def require_auth(
-    user: Optional[dict] = Depends(get_current_user)
+    user: Optional[dict] = Depends(get_current_user),
 ) -> dict:
     """
     Require authentication for endpoint.

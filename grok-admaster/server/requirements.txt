@@ -33,3 +33,6 @@ fakeredis>=2.20.0
 psutil>=5.9.0
 langchain-community
 langgraph
+boto3>=1.34.0
+docker>=7.0.0
+jsonschema>=4.20.0

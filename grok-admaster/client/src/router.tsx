@@ -12,6 +12,7 @@ import { AnomaliesPage } from '@/pages/admin/AnomaliesPage'
 import { CompetitivePage } from '@/pages/admin/CompetitivePage'
 import { ChatPage } from '@/pages/admin/ChatPage'
 import { SettingsPage } from '@/pages/admin/SettingsPage'
+import AutomationPage from '@/pages/admin/AutomationPage'
 import { ClientDashboardPage } from '@/pages/client/DashboardPage'
 
 function ProtectedRoute({ children, allowedRoles }: { children: ReactNode; allowedRoles: string[] }) {
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
       { path: 'anomalies', element: <AnomaliesPage /> },
       { path: 'competitive', element: <CompetitivePage /> },
       { path: 'chat', element: <ChatPage /> },
+      { path: 'automation', element: <AutomationPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

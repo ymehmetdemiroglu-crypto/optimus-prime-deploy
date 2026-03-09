@@ -245,6 +245,14 @@ app.include_router(market_intel_router, prefix="/api/v1/market-intelligence", ta
 from app.api.semantic import router as semantic_router
 app.include_router(semantic_router, prefix="/api/v1/semantic", tags=["Semantic Intelligence"])
 
+# Register Paid Ads Strategy Engine (Multi-Platform)
+from app.modules.paid_ads import router as paid_ads_router
+app.include_router(paid_ads_router, prefix="/api/v1/paid-ads", tags=["Paid Ads Strategy"])
+
+# Register Automation Agent
+from app.modules.automation.router import router as automation_router
+app.include_router(automation_router, prefix="/api/v1", tags=["Automation Agent"])
+
 
 
 @app.get("/")

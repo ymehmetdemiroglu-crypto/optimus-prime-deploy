@@ -573,7 +573,38 @@ class AnomalyDetectionService:
             )
         )
         avg_resolution = await db.scalar(avg_resolution_query)
-        
+
+        # Most common entity type (from unresolved alerts)
+        entity_type_query = select(
+            AnomalyAlert.entity_type,
+            func.count().label("cnt"),
+        ).where(
+            AnomalyAlert.profile_id == profile_id,
+        ).group_by(AnomalyAlert.entity_type).order_by(func.count().desc()).limit(1)
+        et_result = await db.execute(entity_type_query)
+        et_row = et_result.first()
+        most_common_entity = et_row[0] if et_row else "keyword"
+
+        # Detection rate last 24h
+        since_24h = datetime.utcnow() - timedelta(hours=24)
+        rate_24h_query = select(func.count()).select_from(AnomalyAlert).where(
+            and_(
+                AnomalyAlert.profile_id == profile_id,
+                AnomalyAlert.detection_timestamp >= since_24h,
+            )
+        )
+        rate_24h = await db.scalar(rate_24h_query) or 0
+
+        # Detection rate last 7d
+        since_7d = datetime.utcnow() - timedelta(days=7)
+        rate_7d_query = select(func.count()).select_from(AnomalyAlert).where(
+            and_(
+                AnomalyAlert.profile_id == profile_id,
+                AnomalyAlert.detection_timestamp >= since_7d,
+            )
+        )
+        rate_7d = await db.scalar(rate_7d_query) or 0
+
         return AnomalyStatistics(
             total_alerts=total or 0,
             unresolved_count=unresolved or 0,
@@ -582,10 +613,10 @@ class AnomalyDetectionService:
             medium_count=severity_counts.get("medium", 0),
             low_count=severity_counts.get("low", 0),
             avg_resolution_time_minutes=float(avg_resolution) if avg_resolution else None,
-            most_common_entity_type="keyword",  # TODO: Calculate from data
-            most_common_root_cause=None,  # TODO: Calculate from data
-            detection_rate_last_24h=0,  # TODO: Calculate
-            detection_rate_last_7d=0,  # TODO: Calculate
+            most_common_entity_type=most_common_entity,
+            most_common_root_cause=None,
+            detection_rate_last_24h=rate_24h,
+            detection_rate_last_7d=rate_7d,
         )
 
 

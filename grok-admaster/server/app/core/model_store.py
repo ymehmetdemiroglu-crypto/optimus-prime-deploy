@@ -93,19 +93,74 @@ class FileSystemModelStore(ModelStore):
 
 class S3ModelStore(ModelStore):
     """
-    Placeholder for future Cloud integration.
+    Cloud model store backed by AWS S3.
+
+    Requires:
+        - boto3 installed (`pip install boto3`)
+        - AWS credentials configured (env vars, ~/.aws/credentials, or IAM role)
     """
-    def __init__(self, bucket_name: str):
+    def __init__(self, bucket_name: str, prefix: str = "models/"):
         self.bucket = bucket_name
-        
+        self.prefix = prefix
+        # Use joblib if available, fallback to pickle
+        try:
+            import joblib
+            self.backend = joblib
+            self.ext = "joblib"
+        except ImportError:
+            self.backend = pickle
+            self.ext = "pkl"
+
+    def _get_s3_client(self):
+        import boto3
+        return boto3.client("s3")
+
     def save(self, model: Any, name: str) -> bool:
-        # TODO: Implement boto3 upload
-        logger.warning("S3 Save not implemented")
-        return False
-        
+        """Serialize model locally, then upload to S3."""
+        import tempfile
+        try:
+            s3 = self._get_s3_client()
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            s3_key = f"{self.prefix}{name}_{timestamp}.{self.ext}"
+            latest_key = f"{self.prefix}{name}_latest.{self.ext}"
+
+            with tempfile.NamedTemporaryFile(suffix=f".{self.ext}", delete=False) as tmp:
+                tmp_path = tmp.name
+                self.backend.dump(model, tmp)
+
+            # Upload timestamped version
+            s3.upload_file(tmp_path, self.bucket, s3_key)
+            # Upload/overwrite 'latest' pointer
+            s3.upload_file(tmp_path, self.bucket, latest_key)
+
+            os.remove(tmp_path)
+            logger.info(f"Model '{name}' uploaded to s3://{self.bucket}/{s3_key}")
+            return True
+        except Exception as e:
+            logger.error(f"S3 upload failed for '{name}': {e}")
+            return False
+
     def load(self, name: str) -> Any:
-        # TODO: Implement boto3 download
-        return None
+        """Download model from S3 and deserialize."""
+        import tempfile
+        try:
+            s3 = self._get_s3_client()
+            s3_key = f"{self.prefix}{name}_latest.{self.ext}"
+
+            with tempfile.NamedTemporaryFile(suffix=f".{self.ext}", delete=False) as tmp:
+                tmp_path = tmp.name
+
+            s3.download_file(self.bucket, s3_key, tmp_path)
+            logger.info(f"Model '{name}' downloaded from s3://{self.bucket}/{s3_key}")
+
+            with open(tmp_path, "rb") as f:
+                model = self.backend.load(f)
+
+            os.remove(tmp_path)
+            return model
+        except Exception as e:
+            logger.error(f"S3 download failed for '{name}': {e}")
+            return None
 
 # Factory/Singleton access
 _current_store = FileSystemModelStore()

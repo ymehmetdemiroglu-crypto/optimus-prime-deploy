@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/utils/cn'
 import {
   LayoutDashboard, Building2, Target, Zap,
-  AlertTriangle, TrendingUp, MessageSquare, Settings,
+  AlertTriangle, TrendingUp, MessageSquare, Bot, Settings,
 } from 'lucide-react'
 
 const navigation = [
@@ -13,6 +13,7 @@ const navigation = [
   { name: 'Anomalies', href: '/admin/anomalies', icon: AlertTriangle },
   { name: 'Competitive Intel', href: '/admin/competitive', icon: TrendingUp },
   { name: 'AI Chat', href: '/admin/chat', icon: MessageSquare },
+  { name: 'Agent', href: '/admin/automation', icon: Bot },
   { name: 'Settings', href: '/admin/settings', icon: Settings },
 ]
 
